@@ -127,6 +127,14 @@ class CollectorRunner:
             last_reason = '后端未应用: ' + ', '.join(missing)
             print(f"  [query-verify] 响应无效，重试 {attempt}/{attempts}: {last_reason}")
             print(f"  [query-verify] 后端实际 queryItemList: {accepted}")
+
+            missing_date = next((str(c.value) for c in conditions if c.key == 'cprq' and f'cprq={c.value}' in missing), None)
+            if missing_date:
+                invalidate = getattr(self.browser, 'invalidate_prepared_date', None)
+                if callable(invalidate):
+                    invalidate(missing_date)
+                print(f"  [query-verify] 日期条件被后端丢弃；下次重试将重新执行官网 /api/fp/cprq 日期预提交: {missing_date}")
+
             if attempt < attempts:
                 await asyncio.sleep(max(self.interval, 2.0))
         raise RuntimeError('裁判文书网连续返回未完整应用检索条件的响应，已停止当前检索以避免误采。 ' + last_reason)
