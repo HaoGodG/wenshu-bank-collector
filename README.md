@@ -58,6 +58,8 @@ cprq=2026-03-17 TO 2026-03-31
 python main.py probe-date --start-date 2026-03-17 --end-date 2026-03-31
 ```
 
+诊断命令只发送 1 次 `queryDoc`；失败后直接保留证据退出，不在同一次 probe 中机械重试。
+
 运行时会自动把真实 `queryDoc` 网络请求和解密后的关键响应字段追加到：
 
 ```text
