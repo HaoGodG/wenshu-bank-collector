@@ -27,6 +27,14 @@ def load_config(path: Path):
     return cfg, output
 
 
+def query_debug_path(output: Path) -> Path:
+    return output / '03_采集运行记录' / 'query_debug.jsonl'
+
+
+def make_browser(cfg, output):
+    return WenshuBrowser(cfg['browser'], ROOT, query_debug_path(output))
+
+
 def seeds_from(cfg):
     out = []
     for q in cfg['collection'].get('query_seeds', []):
@@ -40,7 +48,7 @@ def seeds_from(cfg):
 
 async def collect(cfg, output):
     state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
-    browser = WenshuBrowser(cfg['browser'], ROOT)
+    browser = make_browser(cfg, output)
     try:
         await browser.start()
         await browser.ensure_login()
@@ -67,7 +75,7 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
     if start > end:
         raise ValueError('start-date 不能晚于 end-date')
 
-    browser = WenshuBrowser(cfg['browser'], ROOT)
+    browser = make_browser(cfg, output)
     state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
     try:
         await browser.start()
@@ -82,38 +90,25 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
         wire = next((c.value for c in conditions if c.key == 'cprq'), '')
         print(f'日期切片验证: logical={start} ~ {end}')
         print(f'wire cprq={wire}')
-        print('请求方式: 使用网页原生 addParams -> loadData -> refreshModule 链路；不下载文书。')
+        print(f'排序: {runner.sort}')
+        print('请求方式: 使用历史已成功采集过的 direct queryDoc 路径；不下载文书。')
+        print('网络诊断日志:', query_debug_path(output))
 
-        baseline_sort = 's50:desc'
-        print(f'\n[probe-date] 先按真实 HAR 默认排序验证: {baseline_sort}')
-        data = await runner.query_checked(conditions, 1, baseline_sort)
+        data = await runner.query_checked(conditions, 1)
         qp = (data or {}).get('queryParams') or {}
         qr = (data or {}).get('queryResult') or {}
         rows = qr.get('resultList') or []
         print('后端 queryItemList:', qp.get('queryItemList'))
         print('resultCount:', qr.get('resultCount'))
         print('第一页前5条裁判日期:', [x.get('31') for x in rows[:5]])
-        print('HAR 基线排序 PASS：日期条件已被后端实际应用。')
-
-        if runner.sort != baseline_sort:
-            print(f'\n[probe-date] 再验证正式采集排序: {runner.sort}')
-            data2 = await runner.query_checked(conditions, 1, runner.sort)
-            qp2 = (data2 or {}).get('queryParams') or {}
-            qr2 = (data2 or {}).get('queryResult') or {}
-            rows2 = qr2.get('resultList') or []
-            print('后端 queryItemList:', qp2.get('queryItemList'))
-            print('resultCount:', qr2.get('resultCount'))
-            print('第一页前5条裁判日期:', [x.get('31') for x in rows2[:5]])
-            print('正式排序 PASS：日期条件仍被后端实际应用。')
-
-        print('PROBE-DATE PASS：网页原生日期查询链路验证通过。')
+        print('PROBE-DATE PASS：日期条件已被后端实际应用。')
     finally:
         state.close()
         await browser.stop()
 
 
 async def doctor(cfg, output):
-    browser = WenshuBrowser(cfg['browser'], ROOT)
+    browser = make_browser(cfg, output)
     try:
         await browser.start()
         info = await browser.ensure_login()
@@ -123,7 +118,7 @@ async def doctor(cfg, output):
 
 
 async def probe(cfg, output):
-    browser = WenshuBrowser(cfg['browser'], ROOT)
+    browser = make_browser(cfg, output)
     state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
     try:
         await browser.start()
