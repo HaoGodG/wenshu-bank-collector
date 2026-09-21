@@ -25,6 +25,16 @@ class CaptureBrowser(WenshuBrowser):
 
     async def _ensure_date_page_context(self, conditions):
         self.date_context_conditions = conditions
+        raw = self._date_context_value(conditions)
+        start, end = raw.split(' TO ', 1)
+        self._date_context_data = {
+            'queryParams': {'queryItemList': [
+                {'id': 's31', 'value': start, 'oper': 'GREATER'},
+                {'id': 's31', 'value': end, 'oper': 'LESS'},
+                {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'},
+            ]},
+            'queryResult': {'resultCount': 1, 'resultList': []},
+        }
 
     async def _native_query_current_date_context(self, page_num, page_size, sort_fields):
         self.native_calls.append((page_num, page_size, sort_fields))
