@@ -6,9 +6,10 @@
 - 日期切片不再做 +/-1 天扩张，逻辑区间按网页原样发送，避免相邻切片重叠。
 - 保留历史实际采集已经成功过的 direct `queryDoc` 路径，但新日期切片先按官网带条件 URL 完成页面 onload 初始化。
 - 自动诊断确认失败请求已在线路上发送完整 cprq，但页面此前先以空条件初始化，后端随后静默丢弃 cprq。
-- direct queryDoc 若在已初始化日期上下文中仍丢 cprq，则同次运行自动回退官网 `loadData1545184311000 -> refreshModule`，无需人工重跑。
-- 第二次真实 probe 证明：官网 `s50:desc` 在同一页面可保留日期并返回 386 条；切到 `s51:desc` 后 direct 与官网 loadData 都只剩 `s17`。日期采集因此固定使用 `s50:desc`，浏览器层阻止 `cprq + s51:*` 组合。
-- 因 `s50` 不是裁判日期排序，关闭 `resume_from_local_latest`；续跑改为重扫查询 + 下载前本地去重，避免中断时漏掉同一叶子内尚未下载的更晚文书。
+- 新的手工排序 HAR 证明 `s51:desc` 与 `s51:asc` 都能正常保留日期条件，撤销“s51 是根因”的错误判断。
+- 日期查询改为严格走官网 `loadData1545184311000 -> refreshModule` 原生排序/分页链路，不再对日期使用 synthetic direct queryDoc。
+- 日期页大小暂时固定为手工成功 HAR 的 `5`，用于把程序请求形态收敛到已验证成功版本；`15` 是否是触发因素尚未定论。
+- `resume_from_local_latest` 暂时保持关闭，待新的原生 `s51 + pageSize=5` 链路通过真实 probe 后再恢复。
 - 保留顶层 `s17/cprqStart/cprqEnd` + `queryCondition` 的请求形态，并继续对后端 `queryItemList` 做 fail-closed 校验。
 - 移除未被证据支持的日期预提交、Referer/pageId 恢复等假设性修复逻辑。
 - 新增 `probe-date --start-date ... --end-date ...`，单独验证指定日期切片且不下载文书。
