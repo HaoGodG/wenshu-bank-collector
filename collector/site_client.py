@@ -1,18 +1,114 @@
 from __future__ import annotations
-import asyncio, json, uuid
+import asyncio, json, uuid, hashlib
 from pathlib import Path
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, parse_qs
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
 class FatalAccessRestriction(RuntimeError): pass
 class SiteCallTimeout(RuntimeError): pass
 
 class WenshuBrowser:
-    def __init__(self, cfg: dict, project_root: Path):
+    def __init__(self, cfg: dict, project_root: Path, debug_log_path: Path | None = None):
         self.cfg = cfg
         self.project_root = project_root
         self.pw = self.context = self.page = None
-        self._prepared_cprq = None
+        self.debug_log_path = Path(debug_log_path) if debug_log_path else None
+
+    def _debug_append(self, event_type: str, payload: dict):
+        if not self.debug_log_path:
+            return
+        try:
+            self.debug_log_path.parent.mkdir(parents=True, exist_ok=True)
+            record = {
+                "event_type": event_type,
+                "payload": payload,
+            }
+            with self.debug_log_path.open("a", encoding="utf-8") as fp:
+                fp.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+                fp.flush()
+        except Exception:
+            # Diagnostic logging must never break collection.
+            pass
+
+    @staticmethod
+    def _safe_form(post_data: str | None) -> dict:
+        parsed = parse_qs(post_data or "", keep_blank_values=True)
+        out = {}
+        for key, values in parsed.items():
+            value = values[-1] if values else ""
+            if key in ("ciphertext", "__RequestVerificationToken"):
+                raw = str(value)
+                out[key] = {
+                    "length": len(raw),
+                    "sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                }
+            else:
+                out[key] = value
+        return out
+
+    def _is_query_doc_request(self, request) -> bool:
+        try:
+            return (
+                "/website/parse/rest.q4w" in request.url
+                and "queryDoc" in (request.post_data or "")
+            )
+        except Exception:
+            return False
+
+    def _on_request(self, request):
+        if not self._is_query_doc_request(request):
+            return
+        try:
+            headers = {str(k).lower(): str(v) for k, v in (request.headers or {}).items()}
+            self._debug_append("query_http_request", {
+                "method": request.method,
+                "url": request.url,
+                "page_url": self.page.url if self.page else "",
+                "headers": {
+                    "content-type": headers.get("content-type"),
+                    "origin": headers.get("origin"),
+                    "referer": headers.get("referer"),
+                    "user-agent": headers.get("user-agent"),
+                },
+                "form": self._safe_form(request.post_data),
+            })
+        except Exception as e:
+            self._debug_append("query_http_request_log_error", {"error": str(e)})
+
+    def _on_response(self, response):
+        request = response.request
+        if not self._is_query_doc_request(request):
+            return
+        try:
+            self._debug_append("query_http_response", {
+                "url": response.url,
+                "status": response.status,
+                "page_url": self.page.url if self.page else "",
+                "post_sha256": hashlib.sha256(
+                    (request.post_data or "").encode("utf-8")
+                ).hexdigest(),
+            })
+        except Exception as e:
+            self._debug_append("query_http_response_log_error", {"error": str(e)})
+
+    def _log_decoded_query(self, param: dict, data: dict):
+        qp = (data or {}).get("queryParams") or {}
+        qr = (data or {}).get("queryResult") or {}
+        safe_param = dict(param)
+        for key in ("ciphertext", "__RequestVerificationToken"):
+            if key in safe_param:
+                raw = str(safe_param[key])
+                safe_param[key] = {
+                    "length": len(raw),
+                    "sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+                }
+        self._debug_append("query_decoded_result", {
+            "page_url": self.page.url if self.page else "",
+            "requested_param": safe_param,
+            "backend_queryItemList": qp.get("queryItemList"),
+            "resultCount": qr.get("resultCount"),
+            "response_keys": sorted((data or {}).keys()) if isinstance(data, dict) else [],
+        })
 
     async def start(self):
         self.pw = await async_playwright().start()
@@ -41,6 +137,8 @@ class WenshuBrowser:
             self.context = await self.pw.chromium.launch_persistent_context(**kwargs)
 
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
+        self.page.on("request", self._on_request)
+        self.page.on("response", self._on_response)
         # 启动阶段只负责把浏览器带到检索页。不要在尚未判断登录态前
         # 强制要求 cipher() 已加载，否则站点脚本偶发延迟会让程序直接退出。
         await self.open_search_page(require_ready=False)
@@ -72,7 +170,6 @@ class WenshuBrowser:
             raise
 
     async def open_search_page(self, *, require_ready: bool = True):
-        self._prepared_cprq = None
         page_id = uuid.uuid4().hex
         url = f"{self.cfg['search_url']}?pageId={page_id}"
         # 检索页本身偶尔也会因页面脚本二次导航产生 ERR_ABORTED；只要最终页面仍
@@ -215,16 +312,10 @@ class WenshuBrowser:
         timeout = int(self.cfg.get('query_wait_timeout_seconds',600))
         # 不传 error callback：保留网站自身 -11 验证码弹窗与重试机制。
         js = r'''({cfg, param}) => new Promise((resolve) => {
-          const requestParam = Object.assign({}, param || {});
-          const pageId = $.WebSite.getParameter("pageId");
-          if (pageId && !Object.prototype.hasOwnProperty.call(requestParam, "pageId")) {
-            requestParam.pageId = pageId;
-          }
           $.WebSite.getData({
             cfg: cfg,
-            param: requestParam,
+            param: param,
             async: true,
-            readUrlParam: false,
             rollback: function(data){ resolve(data); }
           });
         })'''
@@ -241,281 +332,53 @@ class WenshuBrowser:
             raise
 
     @staticmethod
-    def _extract_cprq(conditions: list[dict]) -> str | None:
-        values = [
-            str(item.get("value") or "").strip()
-            for item in conditions or []
-            if str(item.get("key") or "").strip() == "cprq"
-        ]
-        return values[0] if len(values) == 1 and values[0] else None
-
-    async def _sync_query_url(self, conditions: list[dict]) -> str:
-        """Keep the document URL in the same shape as successful browser HARs.
-
-        The server sees the page URL as the XHR Referer.  Real successful date
-        searches have cprqStart/cprqEnd present in that URL; a clean
-        ?pageId-only page repeatedly caused queryDoc to accept s17 but silently
-        drop cprq.  replaceState changes only the current document URL and does
-        not navigate or create a new session.
-        """
-        cprq = self._extract_cprq(conditions)
-        s17_values = [
-            str(item.get("value") or "").strip()
-            for item in conditions or []
-            if str(item.get("key") or "").strip() == "s17"
-        ]
-        s17 = s17_values[0] if len(s17_values) == 1 and s17_values[0] else None
-
-        js = r'''({cprq, s17}) => {
-          const u = new URL(window.location.href);
-          u.searchParams.delete('cprqStart');
-          u.searchParams.delete('cprqEnd');
-          u.searchParams.delete('s17');
-
-          if (cprq && cprq.includes(' TO ')) {
-            const parts = cprq.split(' TO ', 2);
-            u.searchParams.set('cprqStart', parts[0].trim());
-            u.searchParams.set('cprqEnd', parts[1].trim());
-          }
-          if (s17) {
-            u.searchParams.set('s17', s17);
-          }
-          history.replaceState(history.state, document.title, u.pathname + '?' + u.searchParams.toString());
-          return window.location.href;
-        }'''
-        return await self.page.evaluate(js, {"cprq": cprq, "s17": s17})
-
-    async def _prepare_date_filter(self, conditions: list[dict], *, force: bool = False):
-        """Mirror the site's own advanced-search date submit hook.
-
-        The current wenshu page posts /api/fp/cprq immediately before queryDoc
-        whenever a date range is submitted.  Replaying recursive date slices
-        without that hook can lead to a successful query response whose
-        queryItemList silently drops cprq.
-        """
-        raw = self._extract_cprq(conditions)
-        if not raw:
-            self._prepared_cprq = None
-            return None
-        if " TO " not in raw:
-            return None
-        if not force and getattr(self, "_prepared_cprq", None) == raw:
-            return raw
-
-        start_date, end_date = [x.strip() for x in raw.split(" TO ", 1)]
-        js = r'''async ({startDate, endDate}) => {
-          const body = new URLSearchParams({
-            inputCprqStartVal: startDate,
-            inputCprqEndVal: endDate,
-            gjjsSubmit: '1'
-          }).toString();
-          const r = await fetch('/api/fp/cprq', {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-              'X-Requested-With': 'XMLHttpRequest'
-            },
-            body
-          });
-          return {ok: r.ok, status: r.status};
-        }'''
-        result = await self.page.evaluate(js, {"startDate": start_date, "endDate": end_date})
-        if not isinstance(result, dict) or not result.get("ok"):
-            status = result.get("status") if isinstance(result, dict) else None
-            raise RuntimeError(f"裁判日期预提交失败：cprq={raw}, httpStatus={status}")
-        self._prepared_cprq = raw
-        return raw
-
-    def invalidate_prepared_date(self, value: str | None = None):
-        current = getattr(self, "_prepared_cprq", None)
-        if value is None or current == value:
-            self._prepared_cprq = None
-
-    async def recover_query_context(self):
-        """Get a fresh search-page/pageId while preserving the persistent login."""
-        print("[browser] 重新建立检索页上下文并获取新的 pageId。")
-        await self.open_search_page(require_ready=True)
-        info = await self._wait_user_info(attempts=4, delay=0.8)
-        if not self._is_logged_in(info):
-            raise RuntimeError("刷新检索页后登录态失效，请在浏览器中重新登录后重试。")
-        self._prepared_cprq = None
-
-    @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
-        """Mirror the browser request shape without inheriting stale URL state.
+        """Mirror the current website request shape.
 
-        queryCondition remains authoritative, but real browser requests also
-        carry s17 and cprqStart/cprqEnd at top level.  We set those from the
-        CURRENT condition set while getData runs with readUrlParam=false.
+        Real HAR evidence:
+        - s17 is sent both top-level and in queryCondition.
+        - date UI sends cprqStart/cprqEnd top-level, while queryCondition keeps
+          cprq=START TO END.
         """
-        s17_values = [
-            str(item.get("value") or "")
-            for item in conditions or []
-            if str(item.get("key") or "").strip() == "s17"
-        ]
-        if len(s17_values) == 1:
-            param["s17"] = s17_values[0]
+        counts: dict[str, int] = {}
+        for item in conditions or []:
+            key = str(item.get("key") or "").strip()
+            if key:
+                counts[key] = counts.get(key, 0) + 1
 
-        cprq = WenshuBrowser._extract_cprq(conditions)
-        if cprq and " TO " in cprq:
-            start_date, end_date = [x.strip() for x in cprq.split(" TO ", 1)]
-            param["cprqStart"] = start_date
-            param["cprqEnd"] = end_date
+        for item in conditions or []:
+            key = str(item.get("key") or "").strip()
+            if not key or counts.get(key) != 1:
+                continue
+            value = str(item.get("value") or "")
+            if key == "cprq" and " TO " in value:
+                start_date, end_date = value.split(" TO ", 1)
+                param["cprqStart"] = start_date.strip()
+                param["cprqEnd"] = end_date.strip()
+            else:
+                param[key] = value
         return param
 
-    async def _native_date_query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
-        """Run a date query through the site's own list-module pipeline.
-
-        Real HAR/source evidence shows the browser path is:
-        addParams1545035259000 -> loadData1545184311000 ->
-        $.WebSite.refreshModule("1545184311000", ...).
-
-        Directly calling $.WebSite.getData(queryDoc) repeatedly caused the
-        backend to accept s17 but silently drop cprq.  This method lets the
-        page build the query exactly as its own UI does, then reads the
-        decrypted module data that website.js stores on <body>.
-        """
-        await self._sync_query_url(conditions)
-        await self._prepare_date_filter(conditions)
-
-        payload = {
-            "conditions": conditions,
-            "pageNum": int(page_num),
-            "pageSize": int(page_size),
-            "sortFields": str(sort_fields or "s50:desc"),
-        }
-        js = r'''({conditions, pageNum, pageSize, sortFields}) => {
-          if (typeof addParams1545035259000 !== 'function') {
-            return {ok:false, reason:'addParams1545035259000 missing'};
-          }
-          if (typeof loadData1545184311000 !== 'function') {
-            return {ok:false, reason:'loadData1545184311000 missing'};
-          }
-          if (!window.jQuery || !$.WebSite) {
-            return {ok:false, reason:'jQuery/WebSite missing'};
-          }
-
-          // Rebuild the exact selected-condition bar from scratch so recursive
-          // slices never inherit a previous range.
-          $('#_view_1545035259000 .LT_Filter_right p').remove();
-          $('.list-box li').removeClass('on');
-
-          for (const item of (conditions || [])) {
-            const key = String(item.key || '');
-            const value = String(item.value || '');
-            if (!key) continue;
-
-            if (key === 'cprq' && value.includes(' TO ')) {
-              const parts = value.split(' TO ', 2);
-              // addParams has native cprqStart/cprqEnd handling.  It may return
-              // false on the second half because the same cprq chip already
-              // exists; the chip itself is still correctly installed.
-              addParams1545035259000({
-                cprqStart: parts[0].trim(),
-                cprqEnd: parts[1].trim()
-              });
-            } else {
-              const one = {};
-              one[key] = value;
-              addParams1545035259000(one);
-            }
-          }
-
-          // loadData1545184311000 derives sorting from the visible sort tools.
-          $('.tool_PX').removeClass('tool_On tool_OnUp');
-          const sortParts = String(sortFields || 's50:desc').split(':', 2);
-          const sortKey = sortParts[0] || 's50';
-          const sortDir = (sortParts[1] || 'desc').toLowerCase();
-          let $sort = $(".tool_PX[data-value='" + sortKey + "']").first();
-          if (!$sort.length) {
-            // Before the first list render the sort controls may not exist.
-            $('#_view_1545184311000').append(
-              '<div class="tool_PX" data-value="' + sortKey + '" style="display:none"></div>'
-            );
-            $sort = $(".tool_PX[data-value='" + sortKey + "']").first();
-          }
-          $sort.addClass(sortDir === 'asc' ? 'tool_OnUp' : 'tool_On');
-
-          // The native loader reads page size from the module's select.
-          let $size = $('#_view_1545184311000 select.pageSizeSelect').first();
-          if (!$size.length) {
-            $('#_view_1545184311000').append(
-              '<select class="pageSizeSelect" style="display:none">' +
-              '<option>5</option><option>10</option><option>15</option></select>'
-            );
-            $size = $('#_view_1545184311000 select.pageSizeSelect').first();
-          }
-          $size.val(String(pageSize));
-
-          // Remove the previous decrypted module payload so Python can wait
-          // for this request rather than accidentally reading stale data.
-          $('body').removeData('1545184311000');
-
-          const postData = loadData1545184311000({
-            searchMid: '1545035259000',
-            seniorMid: '1545034775000',
-            postData: {},
-            pageNum: pageNum
-          });
-          if (postData === false) {
-            return {ok:false, reason:'native loadData returned false'};
-          }
-          return {ok:true, postData:postData, href:window.location.href};
-        }'''
-        started = await self.page.evaluate(js, payload)
-        if not isinstance(started, dict) or not started.get("ok"):
-            reason = started.get("reason") if isinstance(started, dict) else started
-            raise RuntimeError(f"网页原生日期查询启动失败：{reason}")
-
-        timeout_ms = max(1, int(self.cfg.get('query_wait_timeout_seconds', 600))) * 1000
-        try:
-            await self.page.wait_for_function(
-                """() => {
-                  const d = $.WebSite.getModuleData('1545184311000');
-                  return !!(d && d.queryParams && d.queryResult);
-                }""",
-                timeout=timeout_ms,
-            )
-        except (PlaywrightTimeoutError, PlaywrightError) as e:
-            raise SiteCallTimeout(
-                "网页原生日期查询长时间未完成；如果浏览器有验证码，请正常完成后重试"
-            ) from e
-
-        data = await self.page.evaluate(
-            "() => $.WebSite.getModuleData('1545184311000')"
-        )
-        return data or {}
-
-    async def _direct_query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
-        await self._sync_query_url(conditions)
-        await self._prepare_date_filter(conditions)
+    async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
         ciphertext = await self.page.evaluate("cipher()")
         param = {
             "sortFields": sort_fields,
             "ciphertext": ciphertext,
             "pageNum": page_num,
             "pageSize": page_size,
-            "queryCondition": json.dumps(conditions, ensure_ascii=False, separators=(",", ":"))
+            "queryCondition": json.dumps(conditions, ensure_ascii=False)
         }
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
-        return data or {}
-
-    async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
-        has_date = bool(self._extract_cprq(conditions))
-        use_native = bool(self.cfg.get("use_native_date_query", True))
-        if has_date and use_native:
-            return await self._native_date_query(conditions, page_num, page_size, sort_fields)
-        return await self._direct_query(conditions, page_num, page_size, sort_fields)
+        data = data or {}
+        self._log_decoded_query(param, data)
+        return data
 
     async def facet(self, conditions: list[dict], group_field: str):
-        await self._sync_query_url(conditions)
-        await self._prepare_date_filter(conditions)
         param = {
             "groupFields": group_field,
             "facetLimit": 1000,
-            "queryCondition": json.dumps(conditions, ensure_ascii=False, separators=(",", ":")),
+            "queryCondition": json.dumps(conditions, ensure_ascii=False),
         }
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@leftDataItem", param)
