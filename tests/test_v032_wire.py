@@ -16,7 +16,7 @@ class FakePage:
 
 class CaptureBrowser(WenshuBrowser):
     def __init__(self):
-        self.cfg = {'query_wait_timeout_seconds': 5}
+        self.cfg = {'query_wait_timeout_seconds': 5, 'use_native_date_query': False}
         self.page = FakePage()
         self.captured = []
 
