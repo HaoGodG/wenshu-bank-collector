@@ -60,6 +60,9 @@ queryCondition=[..., {"key":"cprq","value":"2025-12-31 TO 2026-07-01"}]
 
 不会再把该值复制到顶层 `cprqStart/cprqEnd`，以免与地址栏残留日期混淆。
 
+此外，HAR 与网页源码都显示：每次提交新的日期范围时，网页会先 POST `/api/fp/cprq`，
+随后才执行 `queryDoc`。本分支已同步这一步；如果后端仍静默丢弃日期条件，重试前会强制重新执行日期预提交。
+
 确保首尾日期不漏。
 
 ## 本地数据作为续跑与去重依据
@@ -97,11 +100,19 @@ data/03_采集运行记录/collector.sqlite3
 
 ## 使用
 
-先验证：
+先验证主体条件：
 
 ```bash
 python main.py probe
 ```
+
+只验证一个日期切片（不下载文书）：
+
+```bash
+python main.py probe-date --start-date 2026-03-17 --end-date 2026-03-31
+```
+
+该命令会验证已知问题区间实际发送的 `cprq=2026-03-16 TO 2026-04-01` 是否被后端接受。
 
 正式采集：
 
