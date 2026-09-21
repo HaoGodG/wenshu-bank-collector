@@ -1,13 +1,18 @@
-# 裁判文书网日期 HAR 证据（v0.4.0 分支）
+# 裁判文书网日期 HAR 与运行证据（v0.4.0 分支）
 
-本文件记录两份真实浏览器 HAR 对日期检索链路的结论：
+本文件只记录已经被真实 HAR、运行日志或本地 SQLite 支持的结论，不把未验证假设写成根因。
+
+已分析材料：
 
 - `bank-core-date(1).har`
 - `bank-core-date-0316-0401.har`
+- 真实 `probe-date` 失败日志
+- 用户现有采集 SQLite
 
-## 1. 2026-03-16 TO 2026-04-01 本身是有效条件
+## 1. 日期条件本身有效
 
-手工在网页选择 `2026-03-16 ~ 2026-04-01` 后，真实 queryDoc 请求包含：
+用户在网页高级搜索中直接同时填写“当事人=银行”和日期
+`2026-03-16 ~ 2026-04-01`，成功请求包含：
 
 ```text
 cprqStart=2026-03-16
@@ -19,7 +24,7 @@ queryCondition=[
 ]
 ```
 
-解密后的后端响应明确包含：
+后端解密结果包含：
 
 ```text
 s31 GREATER 2026-03-16
@@ -28,157 +33,122 @@ s17 EQUAL   银行某
 resultCount=458
 ```
 
-因此程序日志中同一个 `cprq=2026-03-16 TO 2026-04-01` 被后端完全丢弃，
-不是因为该日期字符串非法。
+因此 `2026-03-16 TO 2026-04-01` 不是非法日期表达式。
 
-## 2. 程序报错发生在后端条件解析阶段
+## 2. 不再根据 GREATER / LESS 做 +/-1 天扩张
 
-失败日志中的后端 `queryItemList` 只有：
+上述同一次查询的结果列表中存在裁判日期为 `2026-04-01` 的文书。
+
+因此不能把后端返回的 `GREATER/LESS` 标签直接解释成严格数学开区间。
+网页把用户选择的起止日期原样发送，本分支也保持同样语义：
+
+```text
+逻辑切片: 2026-03-17 ~ 2026-03-31
+wire cprq: 2026-03-17 TO 2026-03-31
+```
+
+这样也避免相邻二分切片因 +/-1 扩张产生重叠和重复下载。
+
+## 3. direct queryDoc 路径不能被判定为根因
+
+历史实际采集数据已经证明，程序原有 direct `queryDoc` 路径曾成功执行大量日期切片并下载文书。
+因此不能得出“direct queryDoc 天生无法处理日期”的结论。
+
+本分支恢复并保留这条历史已成功路径：
+
+```text
+cipher()
+  -> $.WebSite.getData(queryDoc)
+  -> queryParams/queryResult
+```
+
+请求继续同时发送：
+
+```text
+s17=银行
+cprqStart=<当前开始日期>
+cprqEnd=<当前结束日期>
+queryCondition=[s17 + cprq]
+sortFields=s51:desc
+pageNum/pageSize
+ciphertext
+```
+
+日期条件仍由 `queryParams.queryItemList` fail-closed 校验：
+只有后端真实返回对应 `s31` 条件才继续采集。
+
+## 4. 已失败的 probe 只能证明“该请求实例中 cprq 被后端丢弃”
+
+真实失败日志中，后端只返回：
 
 ```text
 s17 EQUAL 银行某
 ```
 
-而没有任何 `s31`。这意味着 queryDoc 本身返回了成功响应，但日期条件没有进入
-后端实际查询条件。运行时 verifier 正确阻止了这种响应继续被当成目标切片处理。
+而没有任何 `s31`。
 
-## 3. queryCondition.cprq 是活动日期条件，但浏览器请求仍带顶层日期
+已经尝试过但没有解决该失败的实验包括：
 
-旧 HAR 证明，页面内重新选择日期后，URL 中的顶层
-`cprqStart/cprqEnd` 可能仍保留旧值，而 `queryCondition.cprq` 已变化；
-后端最终按新的 `queryCondition.cprq` 解析日期。
+- 重复日期预提交；
+- 换新的 `pageId`；
+- 把日期同步进页面 URL / Referer 形态。
 
-因此：
+因此这些因素不能被写成已经确认的根因。
 
-- `queryCondition.cprq` 是活动条件；
-- 顶层 `cprqStart/cprqEnd` 不是权威来源；
-- 但真实浏览器 queryDoc 请求始终会携带顶层日期字段。
+同样，也没有证据支持“必须先做一次基础银行查询”这一前置步骤：
+用户手工高级搜索是直接同时填写银行和日期后成功。
 
-分支实现采用折中方式：`readUrlParam=false`，不继承地址栏旧值；
-同时从当前 `queryCondition.cprq` 显式生成当前的
-`cprqStart/cprqEnd`，最大程度贴近浏览器请求形态。
+截至目前，真正根因仍需要比较“程序失败的真实 queryDoc 请求”和“成功 HAR 请求”才能确认。
 
-## 4. 日期范围不应再做 +/-1 天扩张
+## 5. 自动 query 诊断
 
-新 HAR 查询 `2026-03-16 TO 2026-04-01` 的结果列表中直接出现
-裁判日期 `2026-04-01` 的文书。
-
-因此不能把后端返回的操作名 `LESS` 简单解释为严格数学意义上的 `<`。
-网页本身就是把用户选择的起止日期原样发送。
-
-分支现在将逻辑切片：
+因为失败时 Chrome 可能直接崩溃，不能依赖手工 DevTools 导出 HAR。
+本分支在 Playwright 请求发出的瞬间自动追加：
 
 ```text
-2026-03-17 ~ 2026-03-31
+data/03_采集运行记录/query_debug.jsonl
 ```
 
-直接发送为：
+每条记录带：
 
-```text
-cprq=2026-03-17 TO 2026-03-31
-```
+- `recorded_at`
+- `run_id`
+- `event_type`
 
-不再扩张成 `2026-03-16 TO 2026-04-01`。这样也避免相邻日期切片人为重叠。
+对 `queryDoc` 请求记录：
 
-## 5. /api/fp/cprq
+- URL / method
+- 当前页面 URL
+- Content-Type / Origin / Referer / User-Agent
+- 实际 POST form
+- `queryCondition`
+- `cprqStart/cprqEnd`
+- `s17`
+- `sortFields`
+- `pageNum/pageSize`
+- `ciphertext` 长度与 SHA-256（不记录原文）
 
-网页源码在高级检索日期提交时会 POST `/api/fp/cprq`，源码注释将其描述为
-“记录日志”。分支继续模拟这一步以贴近真实网页链路，但不把它当作日期条件语义的唯一依据。
+对已返回并解密的结果记录：
 
-当 queryDoc 连续两次成功返回但丢失日期条件时，分支会：
+- 请求参数
+- 后端 `queryItemList`
+- `resultCount`
+- 响应结构字段
 
-1. 重新执行日期预提交；
-2. 刷新检索页；
-3. 获取新的 `pageId`；
-4. 再发送当前切片。
+不记录 Cookie 内容，也不记录 ciphertext 原文。
 
-避免在同一个异常页面上下文中机械重发三次完全相同的请求。
+这样即使 Chrome 在请求之后崩溃，已写入磁盘的请求证据仍然保留，可直接与成功 HAR 做字段级 diff。
 
+## 6. 当前分支保留的功能性改动
 
-## 6. 失败程序请求与成功浏览器请求的 Referer 上下文差异
+当前只保留有明确证据或明确需求支持的改动：
 
-新一轮 `probe-date` 已验证：即使重新执行 `/api/fp/cprq`，并在连续失败后刷新检索页换新的
-`pageId`，后端仍稳定只接受 `s17`，完全丢弃 `cprq`。因此“坏 pageId/页面状态”不足以解释问题。
+1. 日期二分区间原样发送，不再 +/-1；
+2. 后端条件 fail-closed 校验；
+3. `probe-date` 单独验证指定日期，不下载文书；
+4. 下载前先按 docId 去重；
+5. 不同 docId 再按“案号 + 法院 + 裁判日期 + 规范化完整标题”做高置信去重；
+6. 下载后 SHA-256 去重继续兜底；
+7. queryDoc 自动诊断日志。
 
-两份成功 HAR 中，queryDoc 的请求 Referer 都来自带日期参数的检索页 URL，例如：
-
-```text
-.../181217BMTKHNT2W0/index.html
-?pageId=9a112334...
-&cprqStart=2026-03-16
-&cprqEnd=2026-04-01
-&s17=银行
-```
-
-而采集器此前通过 `open_search_page()` 打开的页面只有：
-
-```text
-.../181217BMTKHNT2W0/index.html?pageId=<随机值>
-```
-
-随后虽然 POST body 中已经补齐当前 `cprqStart/cprqEnd`、`s17` 和
-`queryCondition.cprq`，XHR 的页面 Referer 仍缺少日期上下文。
-
-另外，旧 HAR 中用户在页面内把日期从 `2026-09-08~2026-09-15` 改成其他范围时，
-Referer 里的日期值可以继续是旧值，但 `queryCondition.cprq` 仍能生效。这说明服务端不一定要求
-Referer 日期值与当前条件完全相等，但“日期上下文存在于检索页 URL”是所有已观测成功日期请求的共同特征。
-
-因此本分支在每次 query/facet 前使用 `history.replaceState` 将**当前**
-`cprqStart/cprqEnd` 与 `s17` 写入当前文档 URL。该操作不会导航，不会新建会话，
-但会使随后 XHR 的 Referer 与成功浏览器请求保持同一结构。
-
-这一步是基于目前两份 HAR 与失败 probe 的最强剩余差异做出的修复；是否就是最终根因，
-仍需用同一 `probe-date` 在真实登录态下验证。
-
-
-## 7. 失败 probe 已排除 Referer/pageId，转向网页原生 refreshModule 链路
-
-在将当前 `cprqStart/cprqEnd`、`s17` 同步进页面 URL 后，真实登录态
-`probe-date` 仍连续三次只得到：
-
-```text
-queryItemList = [
-  {id: "s17", value: "银行某", oper: "EQUAL"}
-]
-```
-
-并且第二次失败后已经重新打开检索页、换新的 `pageId`，第三次仍然相同。
-
-因此当前可以排除：
-
-- 日期字符串本身非法；
-- 单纯的旧 URL 参数污染；
-- 单纯的 Referer 缺少日期字段；
-- 单纯的坏 `pageId` / 页面上下文；
-- 只缺少 `/api/fp/cprq` 预提交。
-
-进一步检查 HAR 中加载的 `index.js?v=1.6` 可见，网页刷新列表并不是直接调用
-`$.WebSite.getData(queryDoc)`。官方调用链是：
-
-```text
-addParams1545035259000(...)
-  -> loadData1545184311000(...)
-  -> $.WebSite.refreshModule("1545184311000", ...)
-  -> $.WebSite.parseModule(...)
-  -> $.WebSite.getData(module.cfg=queryDoc, ...)
-```
-
-其中 `loadData1545184311000` 还负责：
-
-- 从“已选条件”DOM 重新生成 `postData`；
-- 把 `cprq` 回填为高级检索表单中的 `cprqStart/cprqEnd`；
-- 从页面排序控件决定 `sortFields`；
-- 从页面分页控件决定 `pageSize`；
-- 写入 `localStorage.$listparams`；
-- 最终通过 `refreshModule` 发起列表查询。
-
-此前采集器直接调用 `$.WebSite.getData(queryDoc)`，跳过了这整个模块链。
-这已经成为目前与成功浏览器请求之间最强、且仍未被排除的结构性差异。
-
-因此分支现已将所有包含 `cprq` 的列表查询改为网页原生模块链：
-程序只负责把条件写入页面查询条、设置排序/分页，然后调用
-`loadData1545184311000`。查询完成后直接读取
-`$.WebSite.getModuleData("1545184311000")` 中网页已经解密的结构化结果。
-
-`probe-date` 会先用 HAR 默认排序 `s50:desc` 验证，再验证正式采集排序
-`s51:desc`。如果两者都通过，说明日期条件问题已被定位到“绕过网页模块链”。
+未验证的“原生模块链必须替代 direct queryDoc”“Referer 是根因”“需要前置搜索”等假设均不再作为正式实现依据。
