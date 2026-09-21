@@ -129,3 +129,56 @@ Referer 日期值与当前条件完全相等，但“日期上下文存在于检
 
 这一步是基于目前两份 HAR 与失败 probe 的最强剩余差异做出的修复；是否就是最终根因，
 仍需用同一 `probe-date` 在真实登录态下验证。
+
+
+## 7. 失败 probe 已排除 Referer/pageId，转向网页原生 refreshModule 链路
+
+在将当前 `cprqStart/cprqEnd`、`s17` 同步进页面 URL 后，真实登录态
+`probe-date` 仍连续三次只得到：
+
+```text
+queryItemList = [
+  {id: "s17", value: "银行某", oper: "EQUAL"}
+]
+```
+
+并且第二次失败后已经重新打开检索页、换新的 `pageId`，第三次仍然相同。
+
+因此当前可以排除：
+
+- 日期字符串本身非法；
+- 单纯的旧 URL 参数污染；
+- 单纯的 Referer 缺少日期字段；
+- 单纯的坏 `pageId` / 页面上下文；
+- 只缺少 `/api/fp/cprq` 预提交。
+
+进一步检查 HAR 中加载的 `index.js?v=1.6` 可见，网页刷新列表并不是直接调用
+`$.WebSite.getData(queryDoc)`。官方调用链是：
+
+```text
+addParams1545035259000(...)
+  -> loadData1545184311000(...)
+  -> $.WebSite.refreshModule("1545184311000", ...)
+  -> $.WebSite.parseModule(...)
+  -> $.WebSite.getData(module.cfg=queryDoc, ...)
+```
+
+其中 `loadData1545184311000` 还负责：
+
+- 从“已选条件”DOM 重新生成 `postData`；
+- 把 `cprq` 回填为高级检索表单中的 `cprqStart/cprqEnd`；
+- 从页面排序控件决定 `sortFields`；
+- 从页面分页控件决定 `pageSize`；
+- 写入 `localStorage.$listparams`；
+- 最终通过 `refreshModule` 发起列表查询。
+
+此前采集器直接调用 `$.WebSite.getData(queryDoc)`，跳过了这整个模块链。
+这已经成为目前与成功浏览器请求之间最强、且仍未被排除的结构性差异。
+
+因此分支现已将所有包含 `cprq` 的列表查询改为网页原生模块链：
+程序只负责把条件写入页面查询条、设置排序/分页，然后调用
+`loadData1545184311000`。查询完成后直接读取
+`$.WebSite.getModuleData("1545184311000")` 中网页已经解密的结构化结果。
+
+`probe-date` 会先用 HAR 默认排序 `s50:desc` 验证，再验证正式采集排序
+`s51:desc`。如果两者都通过，说明日期条件问题已被定位到“绕过网页模块链”。
