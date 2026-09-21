@@ -91,19 +91,17 @@ data/03_采集运行记录/query_debug.jsonl
 
 ```yaml
 resume_from_local_latest: false
-skip_completed_slices: false
+skip_completed_slices: true
 ```
 
 当前仍暂时保持 `resume_from_local_latest: false`。原因不是 `s51` 不可用，而是先让新的“官网原生 loadData + s51 + pageSize=5”链路完成真实 probe 验证，再恢复按本地最大裁判日期裁剪远端范围。
 
-因此当前续跑策略以**正确性优先**：
+当前续跑策略分两层：
 
-- 远端日期切片重新扫描；
-- 已成功的相同 `docId` 在下载前直接跳过；
-- 不同 `docId` 再用高置信元数据去重；
-- 已下载文件不重复下载。
+- **切片级 checkpoint**：状态为 `completed` 且结束日期早于今天的历史切片，下一次运行直接整体跳过，不再重复翻页；
+- **文书级去重**：对于上次未完成的切片，仍从第一页重新查询，但已成功的相同 `docId` 会在下载前直接跳过；不同 `docId` 再用高置信元数据去重。
 
-这样会多做一些查询，但调试阶段优先保证不漏文书。
+今天的切片和未完成切片不会因为 checkpoint 被跳过，因此仍以完整性优先。
 
 ## 登录
 
