@@ -12,21 +12,21 @@ storage:
 
 collection:
   strategy: bank_party_date_bisect
-  page_size: 15
+  page_size: 5
   site_visible_limit: 600
   request_interval_seconds: 1.5
   max_download_retries: 3
   query_condition_verify_retries: 3
 
-  # 真实 HAR 与 2026-09-21 诊断均验证：日期条件与官网默认 s50:desc 可同时生效；
-  # 当前站点使用 s51:desc 时会把 cprq 静默丢弃，因此正式采集固定使用 s50:desc。
-  sort_fields: s50:desc
+  # 手工排序 HAR 已确认 s51:desc / s51:asc 都能保留日期条件。
+  # 日期查询走官网 loadData 原生链路，page_size=5 与成功 HAR 一致。
+  sort_fields: s51:desc
 
   # 用户要求：本地下载记录作为去重权威来源。
   # 若本地已有成功下载文书，取其中最大的裁判日期作为本轮检索上界。
   # 例如本地最大裁判日期为 2026-06-11，则只检索 ... ~ 2026-06-11（包含当天）。
-  # s50 并非裁判日期排序；中途停止后不能用本地最大裁判日期裁剪远端查询范围，
-  # 否则可能排除同一未完成切片中尚未下载的更晚文书。续跑改由 documents 去重保证安全。
+  # 在新的原生日期查询链路真实通过 probe 前，暂不按本地最大裁判日期裁剪远端范围。
+  # 这样即使中途停止也优先保证不漏文书；下载前 docId/元数据去重仍会避免重复下载。
   resume_from_local_latest: false
 
   # 不依赖旧 slices 直接跳过；真正去重以 documents 表中本地 docId/status 为准。
