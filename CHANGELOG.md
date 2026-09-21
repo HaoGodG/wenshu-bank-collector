@@ -6,6 +6,9 @@
 - 禁止 `$.WebSite.getData` 自动合并当前 URL 参数（`readUrlParam: false`），避免旧 `cprqStart/cprqEnd` 污染日期切片。
 - 显式保留当前 `pageId`，并继续镜像顶层 `s17=银行`。
 - 新增回归测试，确保 `cprq` 不再被复制到顶层日期参数。
+- 根据 HAR/网页源码补齐官方 `/api/fp/cprq` 日期预提交链路。
+- 后端静默丢弃 `cprq` 时，重试前会清除日期预提交缓存并重新提交，而不是重复发送相同无效请求。
+- 新增 `probe-date --start-date ... --end-date ...`，可单独验证问题日期切片而不下载文书。
 
 ## v0.4.0
 
