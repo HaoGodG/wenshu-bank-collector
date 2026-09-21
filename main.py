@@ -85,7 +85,9 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
             print('没有配置 query_seeds')
             return
         seed = seeds[0]
-        runner = CollectorRunner(cfg['collection'], output, state, browser)
+        probe_collection_cfg = dict(cfg['collection'])
+        probe_collection_cfg['query_condition_verify_retries'] = 1
+        runner = CollectorRunner(probe_collection_cfg, output, state, browser)
         conditions = with_date_condition(seed.conditions, start, end)
         wire = next((c.value for c in conditions if c.key == 'cprq'), '')
         print(f'日期切片验证: logical={start} ~ {end}')
@@ -93,6 +95,8 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
         print(f'排序: {runner.sort}')
         print('请求方式: 使用历史已成功采集过的 direct queryDoc 路径；不下载文书。')
         print('网络诊断日志:', query_debug_path(output))
+        print('诊断 run_id:', browser.debug_run_id)
+        print('probe-date 只发送 1 次 queryDoc；失败后直接保留证据退出。')
 
         data = await runner.query_checked(conditions, 1)
         qp = (data or {}).get('queryParams') or {}
