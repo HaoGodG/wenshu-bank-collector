@@ -113,6 +113,39 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('getParameter("pageId")', page.expression)
         self.assertEqual(page.payload['param']['queryCondition'], '[]')
 
+    async def test_query_checked_rearms_date_after_backend_drops_it(self):
+        class RetryBrowser:
+            def __init__(self):
+                self.calls = 0
+                self.invalidated = []
+            async def query(self, conditions, page_num, page_size, sort_fields):
+                self.calls += 1
+                if self.calls == 1:
+                    return {'queryParams': {'queryItemList': [
+                        {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'}
+                    ]}}
+                return {'queryParams': {'queryItemList': [
+                    {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'},
+                    {'id': 's31', 'value': '2026-03-16', 'oper': 'GREATER'},
+                    {'id': 's31', 'value': '2026-04-01', 'oper': 'LESS'},
+                ]}}
+            def invalidate_prepared_date(self, value=None):
+                self.invalidated.append(value)
+
+        b = RetryBrowser()
+        r = CollectorRunner({
+            'page_size': 15,
+            'request_interval_seconds': 0,
+            'query_condition_verify_retries': 2,
+        }, Path('/tmp'), object(), b)
+        conditions = [
+            Condition('s17', '银行'),
+            Condition('cprq', '2026-03-16 TO 2026-04-01'),
+        ]
+        await r.query_checked(conditions, 1)
+        self.assertEqual(b.calls, 2)
+        self.assertEqual(b.invalidated, ['2026-03-16 TO 2026-04-01'])
+
     def test_site_limit_is_hard_capped_600(self):
         r = CollectorRunner({'site_visible_limit': 9999, 'page_size': 15}, Path('/tmp'), object(), object())
         self.assertEqual(r.site_limit, 600)
