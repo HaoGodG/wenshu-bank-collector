@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 branch fix — HAR request isolation
+
+- 根据 `bank-core-date(1).har` 修正日期请求组装：活动日期只使用 `queryCondition.cprq`。
+- 禁止 `$.WebSite.getData` 自动合并当前 URL 参数（`readUrlParam: false`），避免旧 `cprqStart/cprqEnd` 污染日期切片。
+- 显式保留当前 `pageId`，并继续镜像顶层 `s17=银行`。
+- 新增回归测试，确保 `cprq` 不再被复制到顶层日期参数。
+
 ## v0.4.0
 
 - 根据 `bank-core-date.har` 重新确认真实日期协议：`cprq=A TO B` -> `s31 GREATER A` + `s31 LESS B`。
