@@ -72,6 +72,7 @@ class WenshuBrowser:
             raise
 
     async def open_search_page(self, *, require_ready: bool = True):
+        self._prepared_cprq = None
         page_id = uuid.uuid4().hex
         url = f"{self.cfg['search_url']}?pageId={page_id}"
         # 检索页本身偶尔也会因页面脚本二次导航产生 ERR_ABORTED；只要最终页面仍
@@ -257,7 +258,10 @@ class WenshuBrowser:
         queryItemList silently drops cprq.
         """
         raw = self._extract_cprq(conditions)
-        if not raw or " TO " not in raw:
+        if not raw:
+            self._prepared_cprq = None
+            return None
+        if " TO " not in raw:
             return None
         if not force and getattr(self, "_prepared_cprq", None) == raw:
             return raw
