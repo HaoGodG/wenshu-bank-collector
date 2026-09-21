@@ -118,15 +118,29 @@ skip_completed_slices: true
 
 程序不会直接重放 `/api/login`，也不会绕过验证码。
 
-推荐通过环境变量提供账号密码，不写入仓库：
+推荐使用本地覆盖配置。先复制：
 
 ```bash
-export WENSHU_USERNAME='你的账号或手机号'
-export WENSHU_PASSWORD='你的密码'
-python main.py
+cp config.local.example.yaml config.local.yaml
 ```
 
-如果没有设置环境变量，登录态失效时程序会在控制台询问账号，并用隐藏输入读取密码。
+然后只在本机的 `config.local.yaml` 填一次：
+
+```yaml
+browser:
+  login_username: "你的账号或手机号"
+  login_password: "你的密码"
+```
+
+`config.local.yaml` 已加入 `.gitignore`，不会提交到 Git。程序启动时会自动把它覆盖到公共的 `config.yaml` 上。
+
+登录凭据读取顺序为：
+
+1. `config.local.yaml` 中的 `login_username/login_password`；
+2. 环境变量 `WENSHU_USERNAME/WENSHU_PASSWORD`；
+3. 前两者都没有时才进入交互输入。
+
+这样配置一次后，登录态失效时程序会自动填写账号密码并点击登录，正常情况下只需要手工完成官方验证码。
 
 ## 使用
 
