@@ -82,15 +82,31 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
         wire = next((c.value for c in conditions if c.key == 'cprq'), '')
         print(f'日期切片验证: logical={start} ~ {end}')
         print(f'wire cprq={wire}')
-        print('本命令会执行官网 /api/fp/cprq 日期预提交 + queryDoc 条件校验，但不会下载文书。')
-        data = await runner.query_checked(conditions, 1)
+        print('请求方式: 使用网页原生 addParams -> loadData -> refreshModule 链路；不下载文书。')
+
+        baseline_sort = 's50:desc'
+        print(f'\n[probe-date] 先按真实 HAR 默认排序验证: {baseline_sort}')
+        data = await runner.query_checked(conditions, 1, baseline_sort)
         qp = (data or {}).get('queryParams') or {}
         qr = (data or {}).get('queryResult') or {}
         rows = qr.get('resultList') or []
         print('后端 queryItemList:', qp.get('queryItemList'))
         print('resultCount:', qr.get('resultCount'))
         print('第一页前5条裁判日期:', [x.get('31') for x in rows[:5]])
-        print('PROBE-DATE PASS：该日期条件已被后端实际应用。')
+        print('HAR 基线排序 PASS：日期条件已被后端实际应用。')
+
+        if runner.sort != baseline_sort:
+            print(f'\n[probe-date] 再验证正式采集排序: {runner.sort}')
+            data2 = await runner.query_checked(conditions, 1, runner.sort)
+            qp2 = (data2 or {}).get('queryParams') or {}
+            qr2 = (data2 or {}).get('queryResult') or {}
+            rows2 = qr2.get('resultList') or []
+            print('后端 queryItemList:', qp2.get('queryItemList'))
+            print('resultCount:', qr2.get('resultCount'))
+            print('第一页前5条裁判日期:', [x.get('31') for x in rows2[:5]])
+            print('正式排序 PASS：日期条件仍被后端实际应用。')
+
+        print('PROBE-DATE PASS：网页原生日期查询链路验证通过。')
     finally:
         state.close()
         await browser.stop()
