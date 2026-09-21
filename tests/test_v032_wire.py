@@ -96,6 +96,52 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         await b.query(c, 1, 15, 's51:desc')
         self.assertEqual(b.native_calls, [(1, 5, 's51:desc')])
 
+
+    async def test_date_query_rebuilds_context_when_native_module_disappears(self):
+        class RecoverBrowser(CaptureBrowser):
+            def __init__(self):
+                super().__init__()
+                self.ensure_calls = 0
+                self.native_attempts = 0
+
+            async def _ensure_date_page_context(self, conditions):
+                self.ensure_calls += 1
+                await super()._ensure_date_page_context(conditions)
+
+            async def _native_query_current_date_context(self, page_num, page_size, sort_fields):
+                self.native_attempts += 1
+                if self.native_attempts == 1:
+                    raise RuntimeError(
+                        '网页原生日期查询启动失败: loadData1545184311000 missing'
+                    )
+                return await super()._native_query_current_date_context(
+                    page_num, page_size, sort_fields
+                )
+
+            async def _page_diag(self):
+                return {'url': 'https://wenshu.court.gov.cn/website/wenshu/test'}
+
+            def invalidate_date_context(self, value=None):
+                self._date_context_key = None
+                self._date_native_only_key = None
+                self._date_context_data = None
+
+        b = RecoverBrowser()
+        b.debug_log_path = None
+        b.debug_run_id = 'test'
+        c = [
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
+        ]
+        data = await b.query(c, 7, 5, 's51:desc')
+        self.assertEqual(b.native_attempts, 2)
+        self.assertEqual(b.ensure_calls, 2)
+        self.assertTrue(
+            WenshuBrowser._response_has_date(
+                data, '2026-03-17 TO 2026-03-31'
+            )
+        )
+
     async def test_facet_s17_double_send(self):
         b = CaptureBrowser()
         c = [{'key': 's17', 'value': '银行'}]
