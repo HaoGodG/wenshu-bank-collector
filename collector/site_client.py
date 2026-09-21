@@ -312,7 +312,12 @@ class WenshuBrowser:
         while asyncio.get_running_loop().time() < deadline:
             for frame in self.page.frames:
                 try:
-                    if 'account.court.gov.cn' not in str(frame.url or ''):
+                    frame_url = str(frame.url or '')
+                    if 'account.court.gov.cn' not in frame_url:
+                        continue
+                    # The HAR first shows a transient bare /app iframe, then
+                    # the real OAuth-bound /app?back_url=... login frame.
+                    if 'back_url=' not in frame_url and '/oauth/authorize' not in frame_url:
                         continue
                     user = frame.locator('input[name="username"]').first
                     pwd = frame.locator('input[name="password"]').first
