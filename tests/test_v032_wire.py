@@ -44,6 +44,55 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(json.loads(p['queryCondition']), c)
 
+    async def test_date_query_runs_official_cprq_preflight_once(self):
+        class DatePage:
+            def __init__(self):
+                self.preflights = []
+            async def evaluate(self, expression, *args):
+                if expression == 'cipher()':
+                    return 'TEST_CIPHER'
+                if '/api/fp/cprq' in expression:
+                    self.preflights.append(args[0])
+                    return {'ok': True, 'status': 200}
+                raise AssertionError(expression)
+
+        b = CaptureBrowser()
+        b.page = DatePage()
+        conditions = [
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-16 TO 2026-04-01'},
+        ]
+        await b.query(conditions, 1, 15, 's51:desc')
+        await b.query(conditions, 2, 15, 's51:desc')
+        self.assertEqual(b.page.preflights, [
+            {'startDate': '2026-03-16', 'endDate': '2026-04-01'}
+        ])
+
+        b.invalidate_prepared_date('2026-03-16 TO 2026-04-01')
+        await b.query(conditions, 3, 15, 's51:desc')
+        self.assertEqual(len(b.page.preflights), 2)
+
+    async def test_date_preflight_matches_har_submit_shape(self):
+        class DatePage:
+            async def evaluate(self, expression, payload):
+                self.asserted_expression = expression
+                self.asserted_payload = payload
+                return {'ok': True, 'status': 200}
+
+        b = CaptureBrowser()
+        b.page = DatePage()
+        await b._prepare_date_filter([
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-16 TO 2026-04-01'},
+        ])
+        self.assertIn("fetch('/api/fp/cprq'", b.page.asserted_expression)
+        self.assertIn("gjjsSubmit: '1'", b.page.asserted_expression)
+        self.assertIn("'X-Requested-With': 'XMLHttpRequest'", b.page.asserted_expression)
+        self.assertEqual(
+            b.page.asserted_payload,
+            {'startDate': '2026-03-16', 'endDate': '2026-04-01'}
+        )
+
     async def test_site_get_data_disables_url_param_merge(self):
         class CapturePage:
             url = 'https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html?pageId=test'
