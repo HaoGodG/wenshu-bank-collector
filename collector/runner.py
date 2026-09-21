@@ -39,7 +39,7 @@ class CollectorRunner:
         self.page_size = int(cfg.get('page_size', 15))
         self.site_limit = min(max(1, int(cfg.get('site_visible_limit', 600))), 600)
         self.interval = float(cfg.get('request_interval_seconds', 1.5))
-        self.sort = cfg.get('sort_fields', 's51:desc')
+        self.sort = cfg.get('sort_fields', 's50:desc')
         self.max_pages = max(1, math.ceil(self.site_limit / self.page_size))
         self.overflow_facets = list(cfg.get('overflow_facets') or ['s33', 's39', 's40', 's4', 's8', 's6'])
         # Local document rows are the dedupe authority.  Slices remain audit/checkpoint records.
@@ -205,18 +205,6 @@ class CollectorRunner:
         await self.pause()
         return self.facet_items(raw)
 
-    async def _date_bounds(self, conditions, first_desc=None) -> tuple[date, date] | None:
-        desc = first_desc or await self.query_checked(conditions, 1, 's51:desc')
-        desc_rows = self._rows(desc)
-        latest = next((self._parse_date(x.get('31')) for x in desc_rows if self._parse_date(x.get('31'))), None)
-        asc = await self.query_checked(conditions, 1, 's51:asc')
-        await self.pause()
-        asc_rows = self._rows(asc)
-        earliest = next((self._parse_date(x.get('31')) for x in asc_rows if self._parse_date(x.get('31'))), None)
-        if earliest and latest and earliest <= latest:
-            return earliest, latest
-        return None
-
     async def _years(self, conditions) -> list[tuple[int, int]]:
         items = await self._facet_items(conditions, 's42')
         out = []
@@ -274,15 +262,10 @@ class CollectorRunner:
                 await self._run_date_range(seed, conditions, start, end, depth=0)
             return
 
-        bounds = await self._date_bounds(conditions, first)
-        if not bounds:
-            raise RuntimeError('无法取得裁判年份 facet，也无法取得最早/最晚裁判日期，已停止，避免漏采。')
-        start, end = bounds
-        if local_end:
-            end = min(end, local_end)
-        if start <= end:
-            print(f"  年份 facet 不可用，直接日期二分：{start} ~ {end}")
-            await self._run_date_range(seed, conditions, start, end, depth=0)
+        raise RuntimeError(
+            '裁判年份 facet 不可用，已停止。当前站点实测 s51 裁判日期排序会使 cprq 被后端静默丢弃，'
+            '因此不再使用 s51:asc/desc 推断最早/最晚日期，避免漏采。'
+        )
 
     async def _run_date_range(self, seed: QuerySeed, base_conditions, start: date, end: date, depth: int):
         logical_label = f'{start.isoformat()}~{end.isoformat()}'
