@@ -93,3 +93,39 @@ cprq=2026-03-17 TO 2026-03-31
 4. 再发送当前切片。
 
 避免在同一个异常页面上下文中机械重发三次完全相同的请求。
+
+
+## 6. 失败程序请求与成功浏览器请求的 Referer 上下文差异
+
+新一轮 `probe-date` 已验证：即使重新执行 `/api/fp/cprq`，并在连续失败后刷新检索页换新的
+`pageId`，后端仍稳定只接受 `s17`，完全丢弃 `cprq`。因此“坏 pageId/页面状态”不足以解释问题。
+
+两份成功 HAR 中，queryDoc 的请求 Referer 都来自带日期参数的检索页 URL，例如：
+
+```text
+.../181217BMTKHNT2W0/index.html
+?pageId=9a112334...
+&cprqStart=2026-03-16
+&cprqEnd=2026-04-01
+&s17=银行
+```
+
+而采集器此前通过 `open_search_page()` 打开的页面只有：
+
+```text
+.../181217BMTKHNT2W0/index.html?pageId=<随机值>
+```
+
+随后虽然 POST body 中已经补齐当前 `cprqStart/cprqEnd`、`s17` 和
+`queryCondition.cprq`，XHR 的页面 Referer 仍缺少日期上下文。
+
+另外，旧 HAR 中用户在页面内把日期从 `2026-09-08~2026-09-15` 改成其他范围时，
+Referer 里的日期值可以继续是旧值，但 `queryCondition.cprq` 仍能生效。这说明服务端不一定要求
+Referer 日期值与当前条件完全相等，但“日期上下文存在于检索页 URL”是所有已观测成功日期请求的共同特征。
+
+因此本分支在每次 query/facet 前使用 `history.replaceState` 将**当前**
+`cprqStart/cprqEnd` 与 `s17` 写入当前文档 URL。该操作不会导航，不会新建会话，
+但会使随后 XHR 的 Referer 与成功浏览器请求保持同一结构。
+
+这一步是基于目前两份 HAR 与失败 probe 的最强剩余差异做出的修复；是否就是最终根因，
+仍需用同一 `probe-date` 在真实登录态下验证。
