@@ -18,6 +18,10 @@ collection:
   max_download_retries: 3
   query_condition_verify_retries: 3
 
+  # 日期查询使用裁判文书网页面自身的 addParams -> loadData -> refreshModule 链路。
+  # 直接调用 getData(queryDoc) 会出现后端只接受 s17、静默丢弃 cprq 的情况。
+  use_native_date_query: true
+
   # 必须按裁判日期倒序，便于本地已有数据作为回溯上界。
   sort_fields: s51:desc
 
