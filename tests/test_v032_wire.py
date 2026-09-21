@@ -44,6 +44,26 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(json.loads(p['queryCondition']), c)
 
+    async def test_site_get_data_disables_url_param_merge(self):
+        class CapturePage:
+            url = 'https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html?pageId=test'
+            def __init__(self):
+                self.expression = ''
+                self.payload = None
+            async def evaluate(self, expression, payload):
+                self.expression = expression
+                self.payload = payload
+                return {'ok': True}
+
+        b = CaptureBrowser()
+        page = CapturePage()
+        b.page = page
+        result = await b._site_get_data('cfg@test', {'queryCondition': '[]'})
+        self.assertEqual(result, {'ok': True})
+        self.assertIn('readUrlParam: false', page.expression)
+        self.assertIn('getParameter("pageId")', page.expression)
+        self.assertEqual(page.payload['param']['queryCondition'], '[]')
+
     def test_site_limit_is_hard_capped_600(self):
         r = CollectorRunner({'site_visible_limit': 9999, 'page_size': 15}, Path('/tmp'), object(), object())
         self.assertEqual(r.site_limit, 600)
