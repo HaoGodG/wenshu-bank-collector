@@ -36,8 +36,9 @@ collection:
   # 这样即使中途停止也优先保证不漏文书；下载前 docId/元数据去重仍会避免重复下载。
   resume_from_local_latest: false
 
-  # 不依赖旧 slices 直接跳过；真正去重以 documents 表中本地 docId/status 为准。
-  skip_completed_slices: false
+  # 已完整完成且结束日期早于今天的历史切片直接跳过，避免重跑时重复翻页。
+  # 未完成切片、今天及未来范围仍重新查询；文书下载继续由 documents 表做最终去重。
+  skip_completed_slices: true
 
   # 只有单日仍 >600 时才使用 facet 继续细分。
   overflow_facets:
