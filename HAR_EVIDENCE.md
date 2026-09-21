@@ -116,3 +116,43 @@ v0.4.0 现有逻辑仍把逻辑闭区间 `[start,end]` 转换为：
 并由运行时的后端 `queryParams.queryItemList` 校验日期条件是否按预期生效。
 本次附件直接证明的是“活动日期条件应以 `queryCondition.cprq` 为准”和“顶层日期参数可能陈旧”；
 本次修复不额外改变既有的日期边界语义。
+
+
+## 6. 日期提交前还有 /api/fp/cprq
+
+同一份 HAR 还显示，网页每次真正提交新的裁判日期范围前，都会额外 POST：
+
+```text
+/api/fp/cprq
+```
+
+例如：
+
+```text
+inputCprqStartVal=2026-08-04
+inputCprqEndVal=2026-09-30
+gjjsSubmit=1
+```
+
+紧接着才发送包含：
+
+```text
+queryCondition=[..., {"key":"cprq","value":"2026-08-04 TO 2026-09-30"}]
+```
+
+的 `queryDoc`。
+
+HAR 中另一组 `2026-03-30 TO 2026-09-30` 也是相同顺序。网页源码的高级检索提交事件同样明确调用
+`/api/fp/cprq` 后再执行 `addParams...` / `$page.loadData()`。
+
+因此本分支在每个新的递归日期切片第一次查询前，也执行同样的官方日期预提交。
+同一切片的后续分页和 facet 查询不会重复提交；如果后端响应里再次丢失 `cprq`，
+重试前会清除预提交缓存，下一次请求重新执行 `/api/fp/cprq`，而不是原样重发。
+
+这用于解释重复出现的：
+
+```text
+后端实际 queryItemList: [{'id':'s17', ...}]
+```
+
+即请求成功但日期条件被静默忽略的情况。
