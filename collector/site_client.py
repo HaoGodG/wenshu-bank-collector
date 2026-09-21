@@ -17,6 +17,7 @@ class WenshuBrowser:
         self.debug_run_id = uuid.uuid4().hex
         self._date_context_key = None
         self._date_native_only_key = None
+        self._date_context_data = None
 
     def _debug_append(self, event_type: str, payload: dict):
         if not self.debug_log_path:
@@ -178,6 +179,7 @@ class WenshuBrowser:
     async def open_search_page(self, *, require_ready: bool = True):
         self._date_context_key = None
         self._date_native_only_key = None
+        self._date_context_data = None
         page_id = uuid.uuid4().hex
         url = f"{self.cfg['search_url']}?pageId={page_id}"
         # 检索页本身偶尔也会因页面脚本二次导航产生 ERR_ABORTED；只要最终页面仍
@@ -438,6 +440,7 @@ class WenshuBrowser:
         })
         self._date_context_key = key
         self._date_native_only_key = None
+        self._date_context_data = data
 
     @staticmethod
     def _response_has_date(data: dict, raw: str) -> bool:
@@ -542,12 +545,14 @@ class WenshuBrowser:
         if value is None:
             self._date_context_key = None
             self._date_native_only_key = None
+            self._date_context_data = None
             return
         # The cached key contains the serialized cprq value; invalidate only
         # when it refers to the failed slice.
         if self._date_context_key and value in self._date_context_key:
             self._date_context_key = None
             self._date_native_only_key = None
+            self._date_context_data = None
 
     @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
@@ -581,6 +586,18 @@ class WenshuBrowser:
         raw_date = self._date_context_value(conditions)
         if raw_date:
             await self._ensure_date_page_context(conditions)
+            initial = self._date_context_data or {}
+            initial_count = ((initial.get("queryResult") or {}).get("resultCount"))
+            try:
+                initial_count = int(initial_count or 0)
+            except (TypeError, ValueError):
+                initial_count = 0
+            if page_num == 1 and initial_count == 0:
+                self._debug_append("date_native_empty_from_context", {
+                    "cprq": raw_date,
+                    "resultCount": 0,
+                })
+                return initial
             self._debug_append("date_native_query", {
                 "cprq": raw_date,
                 "pageNum": page_num,
