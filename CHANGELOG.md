@@ -7,7 +7,9 @@
 - 在关闭 URL 参数自动合并的前提下，显式发送当前 `cprqStart/cprqEnd`、`s17`、`pageId`。
 - `queryCondition` 改为紧凑 JSON，进一步贴近网页 `JSON.stringify` 请求形态。
 - 日期条件连续两次被后端静默丢弃时，刷新检索页并使用新的 `pageId` 再试。
-- 根据失败 probe 与成功 HAR 的剩余差异，每次日期 query/facet 前把当前 `cprqStart/cprqEnd`、`s17` 同步进页面 URL，使 XHR Referer 保持浏览器真实请求结构。
+- Referer/pageId 同步已被真实 probe 排除为根因；保留页面 URL 同步仅用于贴近网页状态。
+- 日期列表查询改为网页原生 `addParams1545035259000 -> loadData1545184311000 -> refreshModule` 链路，不再直接调用 `getData(queryDoc)`。
+- `probe-date` 先按 HAR 默认 `s50:desc` 验证，再验证正式采集的 `s51:desc`。
 - 新增下载前高置信元数据去重：案号 + 法院 + 裁判日期 + 规范化完整标题全部一致时，跨 docId 直接跳过下载。
 - 保留下载后 SHA-256 去重作为最终兜底。
 
