@@ -119,8 +119,27 @@ class CollectorRunner:
         requested = self.cond_dicts(conditions)
         last_reason = ''
         actual_sort = sort_fields or self.sort
+        raw_date = next((str(c.value) for c in conditions if c.key == 'cprq'), '')
+        query_label = raw_date or '无日期条件'
         for attempt in range(1, attempts + 1):
-            data = await self.browser.query(requested, page_num, self.page_size, actual_sort)
+            print(
+                f"  [query-start] {query_label} | page={page_num} | "
+                f"pageSize={self.page_size} | sort={actual_sort} | attempt={attempt}/{attempts}"
+            )
+            task = asyncio.create_task(
+                self.browser.query(requested, page_num, self.page_size, actual_sort)
+            )
+            waited = 0
+            while True:
+                done, _ = await asyncio.wait({task}, timeout=15.0)
+                if task in done:
+                    data = await task
+                    break
+                waited += 15
+                print(
+                    f"  [query-wait] {query_label} | page={page_num} | "
+                    f"已等待 {waited}s，仍在等待官网响应/页面初始化"
+                )
             ok, missing, accepted = self.check_backend_conditions(conditions, data)
             if ok:
                 return data
