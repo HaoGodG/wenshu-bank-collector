@@ -85,6 +85,17 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+    async def test_date_query_forces_har_proven_page_size_5(self):
+        b = CaptureBrowser()
+        b.debug_log_path = None
+        b.debug_run_id = 'test'
+        c = [
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
+        ]
+        await b.query(c, 1, 15, 's51:desc')
+        self.assertEqual(b.native_calls, [(1, 5, 's51:desc')])
+
     async def test_facet_s17_double_send(self):
         b = CaptureBrowser()
         c = [{'key': 's17', 'value': '银行'}]
