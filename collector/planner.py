@@ -38,15 +38,14 @@ def bisect_dates(start: date, end: date) -> tuple[tuple[date, date], tuple[date,
 
 
 def with_date_condition(conditions: list[Condition], start: date, end: date) -> list[Condition]:
-    """Build the HAR-proven wire condition for logical inclusive [start,end].
+    """Use the same inclusive date range that the website UI sends.
 
-    bank-core-date.har shows cprq=A TO B becomes s31 GREATER A + s31 LESS B.
-    Expand one day on each side so logical boundary dates are not lost.
+    The 2026-03-16~2026-04-01 HAR returns documents dated 2026-04-01 while
+    queryParams reports s31 LESS 2026-04-01, so the backend's operator labels
+    must not be interpreted as strict mathematical inequalities here.
     """
     base = [c for c in conditions if c.key != "cprq"]
-    wire_start = start - timedelta(days=1)
-    wire_end = end + timedelta(days=1)
-    return base + [Condition("cprq", f"{wire_start.isoformat()} TO {wire_end.isoformat()}")]
+    return base + [Condition("cprq", f"{start.isoformat()} TO {end.isoformat()}")]
 
 
 def add_condition(conditions: list[Condition], key: str, value: str) -> list[Condition]:
