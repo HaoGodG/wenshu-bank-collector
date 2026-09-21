@@ -19,6 +19,70 @@ class WenshuBrowser:
         self._date_native_only_key = None
         self._date_context_data = None
 
+    @staticmethod
+    def is_session_lost_error(exc) -> bool:
+        """Return True when Playwright lost the page/context/browser transport."""
+        current = exc
+        seen = set()
+        needles = (
+            'target page, context or browser has been closed',
+            'target closed',
+            'page has been closed',
+            'context has been closed',
+            'browser has been closed',
+            'browser closed',
+            'connection closed',
+            'connection terminated',
+        )
+        while current is not None and id(current) not in seen:
+            seen.add(id(current))
+            name = type(current).__name__.lower()
+            message = str(current).lower()
+            if 'targetclosed' in name or any(x in message for x in needles):
+                return True
+            current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
+        return False
+
+    async def recover_session(self, reason: str = ''):
+        """Restart Playwright on the same persistent profile and revalidate login."""
+        self._debug_append('browser_session_recover_start', {'reason': str(reason)[:1000]})
+        print(f"[browser-recover] 浏览器会话已失效，正在使用原 Profile 重建会话: {reason}")
+        try:
+            await self.stop()
+        finally:
+            self.pw = self.context = self.page = None
+            self.invalidate_date_context()
+
+        delay = max(0.0, float(self.cfg.get('browser_recovery_delay_seconds', 1.0)))
+        if delay:
+            await asyncio.sleep(delay)
+
+        last_error = None
+        for launch_attempt in range(1, 3):
+            try:
+                await self.start()
+                info = await self.ensure_login()
+                self._debug_append('browser_session_recover_ok', {
+                    'launch_attempt': launch_attempt,
+                    'page_url': self.page.url if self.page else '',
+                })
+                print("[browser-recover] 浏览器会话恢复完成，继续当前任务。")
+                return info
+            except Exception as e:
+                last_error = e
+                self._debug_append('browser_session_recover_retry', {
+                    'launch_attempt': launch_attempt,
+                    'error': str(e)[:1000],
+                })
+                try:
+                    await self.stop()
+                except Exception:
+                    pass
+                self.pw = self.context = self.page = None
+                if launch_attempt < 2:
+                    await asyncio.sleep(max(1.0, delay))
+        raise RuntimeError(f"浏览器会话恢复失败: {last_error}") from last_error
+
     def _debug_append(self, event_type: str, payload: dict):
         if not self.debug_log_path:
             return
@@ -153,16 +217,24 @@ class WenshuBrowser:
     async def stop(self):
         # PyCharm Stop / Ctrl+C / 用户手工关闭 Chrome 时，driver 可能已经先断开。
         # 清理阶段不应把这种正常停止升级成新的异常。
-        if self.context:
-            try:
-                await self.context.close()
-            except Exception:
-                pass
-        if self.pw:
-            try:
-                await self.pw.stop()
-            except Exception:
-                pass
+        context = self.context
+        pw = self.pw
+        try:
+            if context:
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+            if pw:
+                try:
+                    await pw.stop()
+                except Exception:
+                    pass
+        finally:
+            self.pw = self.context = self.page = None
+            self._date_context_key = None
+            self._date_native_only_key = None
+            self._date_context_data = None
 
     async def _goto(self, url: str, *, tolerate_aborted: bool = False):
         try:
@@ -214,7 +286,9 @@ class WenshuBrowser:
                 timeout=max(1, int(timeout_seconds)) * 1000,
             )
             return True
-        except (PlaywrightTimeoutError, PlaywrightError):
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
+            if self.is_session_lost_error(e):
+                raise
             return False
 
     async def wait_ready(self):
@@ -233,7 +307,9 @@ class WenshuBrowser:
                 if attempt > 1:
                     print(f"[browser] 检索页脚本第 {attempt} 次尝试已就绪。")
                 return
-            except (PlaywrightTimeoutError, PlaywrightError):
+            except (PlaywrightTimeoutError, PlaywrightError) as e:
+                if self.is_session_lost_error(e):
+                    raise
                 last_diag = await self._page_diag()
                 url = str(last_diag.get('url') or '')
                 if 'noauth.html' in url:
@@ -262,7 +338,9 @@ class WenshuBrowser:
     async def user_info(self):
         try:
             return await self.page.evaluate("() => { try { return $.WebSite.getUserInfo ? $.WebSite.getUserInfo() : null } catch(e) { return null } }")
-        except PlaywrightError:
+        except PlaywrightError as e:
+            if self.is_session_lost_error(e):
+                raise
             return None
 
     @staticmethod
@@ -453,7 +531,12 @@ class WenshuBrowser:
         try:
             return await asyncio.wait_for(self.page.evaluate(js, {"cfg": cfg, "param": param}), timeout=timeout)
         except Exception as e:
-            url = self.page.url
+            if self.is_session_lost_error(e):
+                raise
+            try:
+                url = self.page.url if self.page else ''
+            except Exception:
+                url = ''
             if 'noauth.html' in url:
                 raise FatalAccessRestriction("站点返回 -12：当前账户/实名权限不足") from e
             if 'blackip.html' in url:
@@ -544,6 +627,8 @@ class WenshuBrowser:
             await self.page.wait_for_function(js, arg=expected, timeout=timeout_ms)
         except (PlaywrightTimeoutError, PlaywrightError) as e:
             self._date_context_key = None
+            if self.is_session_lost_error(e):
+                raise
             raise SiteCallTimeout(
                 f"页面按官方 URL 初始化后仍未形成日期条件: cprq={raw}"
             ) from e

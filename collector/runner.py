@@ -114,6 +114,19 @@ class CollectorRunner:
                 missing.append(f'{key}={value}')
         return not missing, missing, accepted
 
+    async def _recover_browser_session(self, error, *, operation: str):
+        checker = getattr(self.browser, 'is_session_lost_error', None)
+        if not checker or not checker(error):
+            return False
+        reason = str(error)
+        self.state.event('browser_session_lost', {
+            'operation': operation,
+            'error': reason[:1000],
+        })
+        print(f"  [browser-recover] {operation} -> {reason}")
+        await self.browser.recover_session(reason)
+        return True
+
     async def query_checked(self, conditions, page_num, sort_fields=None):
         attempts = max(1, int(self.cfg.get('query_condition_verify_retries', 3)))
         requested = self.cond_dicts(conditions)
@@ -121,25 +134,48 @@ class CollectorRunner:
         actual_sort = sort_fields or self.sort
         raw_date = next((str(c.value) for c in conditions if c.key == 'cprq'), '')
         query_label = raw_date or '无日期条件'
-        for attempt in range(1, attempts + 1):
+        max_session_recoveries = max(1, int(self.cfg.get('browser_session_recovery_retries', 2)))
+        session_recoveries = 0
+        attempt = 1
+        while attempt <= attempts:
             print(
                 f"  [query-start] {query_label} | page={page_num} | "
                 f"pageSize={self.page_size} | sort={actual_sort} | attempt={attempt}/{attempts}"
             )
-            task = asyncio.create_task(
-                self.browser.query(requested, page_num, self.page_size, actual_sort)
-            )
-            waited = 0
-            while True:
-                done, _ = await asyncio.wait({task}, timeout=15.0)
-                if task in done:
-                    data = await task
-                    break
-                waited += 15
-                print(
-                    f"  [query-wait] {query_label} | page={page_num} | "
-                    f"已等待 {waited}s，仍在等待官网响应/页面初始化"
+            task = None
+            try:
+                task = asyncio.create_task(
+                    self.browser.query(requested, page_num, self.page_size, actual_sort)
                 )
+                waited = 0
+                while True:
+                    done, _ = await asyncio.wait({task}, timeout=15.0)
+                    if task in done:
+                        data = await task
+                        break
+                    waited += 15
+                    print(
+                        f"  [query-wait] {query_label} | page={page_num} | "
+                        f"已等待 {waited}s，仍在等待官网响应/页面初始化"
+                    )
+            except Exception as e:
+                if task is not None and not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+                checker = getattr(self.browser, 'is_session_lost_error', None)
+                if checker and checker(e):
+                    if session_recoveries >= max_session_recoveries:
+                        raise
+                    session_recoveries += 1
+                    await self._recover_browser_session(
+                        e,
+                        operation=f'query page={page_num} conditions={query_label}',
+                    )
+                    if raw_date and hasattr(self.browser, 'invalidate_date_context'):
+                        self.browser.invalidate_date_context(raw_date)
+                    continue
+                raise
+
             ok, missing, accepted = self.check_backend_conditions(conditions, data)
             if ok:
                 return data
@@ -154,6 +190,7 @@ class CollectorRunner:
                 self.browser.invalidate_date_context(missing_cprq)
             if attempt < attempts:
                 await asyncio.sleep(max(self.interval, 2.0))
+            attempt += 1
         raise RuntimeError('裁判文书网连续返回未完整应用检索条件的响应，已停止当前检索以避免误采。 ' + last_reason)
 
     def verify_seed_conditions(self, seed_name, requested_conditions, data):
@@ -391,6 +428,7 @@ class CollectorRunner:
         print(f"    叶子查询 {start_label} ~ {end_label}: {total} 条，共 {pages} 页")
 
         processed = 0
+        unresolved = 0
         for page_num in range(1, pages + 1):
             page_data = first if page_num == 1 else await self.query_checked(conditions, page_num)
             if page_num > 1:
@@ -409,6 +447,7 @@ class CollectorRunner:
                 outcome = await self.handle_result(item, seed)
                 counters[outcome if outcome in counters else 'failed'] += 1
             processed += len(rows)
+            unresolved += counters['failed'] + counters['missing']
             print(
                 f"      page {page_num}/{pages}: {len(rows)} | 累计={processed}/{total} | "
                 f"下载成功={counters['success']} 本地已存在={counters['skipped']} 重复={counters['duplicate']} "
@@ -419,6 +458,16 @@ class CollectorRunner:
         if processed < total:
             self.state.save_slice(key, seed.name, conditions, start_label, end_label, 'failed', total, f'processed={processed};expected={total}')
             raise RuntimeError(f'叶子查询 {start_label} ~ {end_label} 仅处理 {processed}/{total} 条，已停止，避免漏采。')
+
+        if unresolved:
+            self.state.save_slice(
+                key, seed.name, conditions, start_label, end_label, 'failed', total,
+                f'processed={processed};unresolved={unresolved};site_limit={self.site_limit};sort={self.sort}',
+            )
+            raise RuntimeError(
+                f'叶子查询 {start_label} ~ {end_label} 有 {unresolved} 条下载失败/缺少文书ID；'
+                '未标记 completed，重新运行会继续重试，避免永久漏采。'
+            )
 
         self.state.save_slice(key, seed.name, conditions, start_label, end_label, 'completed', total, f'processed={processed};site_limit={self.site_limit};sort={self.sort}')
         self.exporter.export_all()
@@ -447,8 +496,11 @@ class CollectorRunner:
             print(f"    [pre-dedupe] {meta.get('case_no')} -> duplicate_of={canonical}")
             return 'duplicate'
 
-        retries = int(self.cfg.get('max_download_retries', 3))
-        for attempt in range(1, retries + 1):
+        retries = max(1, int(self.cfg.get('max_download_retries', 3)))
+        max_session_recoveries = max(1, int(self.cfg.get('browser_session_recovery_retries', 2)))
+        session_recoveries = 0
+        attempt = 1
+        while attempt <= retries:
             try:
                 self.state.mark_attempt(doc_id)
                 chk = await self.browser.is_down(doc_id)
@@ -515,9 +567,25 @@ class CollectorRunner:
             except FatalAccessRestriction:
                 raise
             except Exception as e:
+                checker = getattr(self.browser, 'is_session_lost_error', None)
+                if checker and checker(e):
+                    if session_recoveries >= max_session_recoveries:
+                        raise
+                    session_recoveries += 1
+                    self.state.mark_failure(doc_id, 'retry', f'browser session lost: {e}')
+                    print(
+                        f"    download browser recover {session_recoveries}/{max_session_recoveries}: "
+                        f"{meta.get('case_no')} -> {e}"
+                    )
+                    await self._recover_browser_session(
+                        e,
+                        operation=f"download {meta.get('case_no') or doc_id}",
+                    )
+                    continue
                 self.state.mark_failure(doc_id, 'retry', str(e))
                 print(f"    download retry {attempt}/{retries}: {meta.get('case_no')} -> {e}")
                 if attempt < retries:
                     await asyncio.sleep(max(self.interval, 2))
+                attempt += 1
         self.state.mark_failure(doc_id, 'failed', '达到最大重试次数')
         return 'failed'

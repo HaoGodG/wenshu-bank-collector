@@ -1,7 +1,10 @@
+import asyncio
 from datetime import date
+
+import pytest
 from pathlib import Path
 
-from collector.models import Condition
+from collector.models import Condition, QuerySeed
 from collector.planner import bisect_dates, with_date_condition
 from collector.runner import CollectorRunner
 from collector.site_client import WenshuBrowser
@@ -67,4 +70,102 @@ def test_local_latest_success_date(tmp_path):
         db.upsert_seen(doc, meta, {'rowkey': doc}, ['BANK_PARTY'], query_source='银行作为当事人')
         db.mark_success(doc, f'{doc}.doc', None, None, f'sha{i}')
     assert db.latest_success_decision_date() == '2026-06-11'
+    db.close()
+
+
+def test_session_lost_detector_matches_target_closed_message():
+    err = RuntimeError('Page.evaluate: Target page, context or browser has been closed')
+    assert WenshuBrowser.is_session_lost_error(err)
+    assert not WenshuBrowser.is_session_lost_error(RuntimeError('ordinary query failure'))
+
+
+def test_query_checked_recovers_dead_browser_and_retries_same_page(tmp_path):
+    class FakeBrowser:
+        def __init__(self):
+            self.query_calls = 0
+            self.recover_calls = 0
+
+        @staticmethod
+        def is_session_lost_error(exc):
+            return WenshuBrowser.is_session_lost_error(exc)
+
+        async def recover_session(self, reason=''):
+            self.recover_calls += 1
+
+        def invalidate_date_context(self, value=None):
+            pass
+
+        async def query(self, requested, page_num, page_size, sort_fields):
+            self.query_calls += 1
+            if self.query_calls == 1:
+                raise RuntimeError('Page.evaluate: Target page, context or browser has been closed')
+            return {
+                'queryParams': {'queryItemList': [
+                    {'id': 's17', 'oper': 'EQUAL', 'value': '银行某'},
+                ]},
+                'queryResult': {'resultCount': 1, 'resultList': []},
+            }
+
+    db = StateDB(tmp_path / 'state.sqlite3')
+    browser = FakeBrowser()
+    runner = CollectorRunner(
+        {
+            'page_size': 5,
+            'sort_fields': 's51:desc',
+            'request_interval_seconds': 0,
+            'query_condition_verify_retries': 1,
+            'browser_session_recovery_retries': 2,
+        },
+        tmp_path,
+        db,
+        browser,
+    )
+    data = asyncio.run(runner.query_checked([Condition('s17', '银行')], 32))
+    assert data['queryResult']['resultCount'] == 1
+    assert browser.query_calls == 2
+    assert browser.recover_calls == 1
+    db.close()
+
+
+def test_leaf_with_failed_document_is_not_marked_completed(tmp_path):
+    db = StateDB(tmp_path / 'state.sqlite3')
+    runner = CollectorRunner(
+        {'page_size': 5, 'sort_fields': 's51:desc', 'request_interval_seconds': 0},
+        tmp_path,
+        db,
+        object(),
+    )
+    conditions = [
+        Condition('s17', '银行'),
+        Condition('cprq', '2025-09-01 TO 2025-09-15'),
+    ]
+    seed = QuerySeed('银行作为当事人', ['BANK_PARTY'], conditions)
+    first = {
+        'queryResult': {
+            'resultCount': 2,
+            'resultList': [
+                {'rowkey': 'ok'},
+                {'rowkey': 'bad'},
+            ],
+        }
+    }
+
+    async def fake_handle(item, _seed):
+        return 'failed' if item.get('rowkey') == 'bad' else 'success'
+
+    runner.handle_result = fake_handle
+    with pytest.raises(RuntimeError, match='未标记 completed'):
+        asyncio.run(
+            runner._process_leaf(
+                seed,
+                conditions,
+                '2025-09-01',
+                '2025-09-15',
+                first,
+                2,
+                True,
+            )
+        )
+    key = runner._slice_key(seed, conditions, '2025-09-01', '2025-09-15')
+    assert db.get_slice_status(key) == 'failed'
     db.close()
