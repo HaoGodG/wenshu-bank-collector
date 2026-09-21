@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, json, uuid, hashlib, os, getpass
+import asyncio, json, uuid, hashlib, os, getpass, sys
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote, urlparse, parse_qs, urlencode
@@ -297,12 +297,18 @@ class WenshuBrowser:
         if not username:
             username = input("裁判文书网账号/手机号: ").strip()
         if not password:
+            if not sys.stdin.isatty():
+                raise RuntimeError(
+                    f"当前控制台无法安全隐藏密码输入。请在运行环境中设置 {password_env}，"
+                    f"例如 PyCharm Run Configuration -> Environment variables 中配置 "
+                    f"{password_env}=你的密码；程序不会在非 TTY 控制台回显读取密码。"
+                )
             password = getpass.getpass("裁判文书网密码: ")
 
         if not username or not password:
             raise RuntimeError(
                 f"缺少登录凭据。可设置环境变量 {username_env} / {password_env}，"
-                "或在程序提示时输入。"
+                "或在支持隐藏输入的终端中运行。"
             )
         return username, password
 
