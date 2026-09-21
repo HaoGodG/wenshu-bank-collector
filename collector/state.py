@@ -1,7 +1,14 @@
 from __future__ import annotations
-import json, sqlite3
+import json, sqlite3, html, re
 from pathlib import Path
 from .utils import now_iso, stable_hash
+
+
+def _identity_text(value) -> str:
+    text = html.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\s+", "", text)
+    return text.strip()
 
 SCHEMA = r'''
 PRAGMA journal_mode=WAL;
@@ -98,6 +105,60 @@ class StateDB:
     def should_download(self, source_doc_id: str) -> bool:
         row = self.db.execute("SELECT status FROM documents WHERE source_doc_id=?", (source_doc_id,)).fetchone()
         return not row or row[0] not in ('success','duplicate','restricted')
+
+    def find_pre_download_duplicate(self, source_doc_id: str, meta: dict):
+        """Find a high-confidence local duplicate before downloading bytes.
+
+        Exact docId is handled by should_download().  This second layer only
+        matches rows with the same non-empty case number, court, decision date,
+        and normalized full title.  It deliberately fails open when metadata
+        is incomplete or ambiguous.
+        """
+        case_no = str(meta.get('case_no') or '').strip()
+        court = str(meta.get('court') or '').strip()
+        decision_date = str(meta.get('decision_date') or '').strip()
+        title = _identity_text(meta.get('title'))
+        if not (case_no and court and decision_date and title):
+            return None
+
+        rows = self.db.execute(
+            """
+            SELECT source_doc_id,title,status,duplicate_of,file_path,sha256
+            FROM documents
+            WHERE source_doc_id<>?
+              AND case_no=?
+              AND court=?
+              AND decision_date=?
+              AND status IN ('success','duplicate')
+            ORDER BY CASE status WHEN 'success' THEN 0 ELSE 1 END, updated_at DESC
+            """,
+            (source_doc_id, case_no, court, decision_date),
+        ).fetchall()
+        for row in rows:
+            if _identity_text(row['title']) != title:
+                continue
+            canonical = row['source_doc_id']
+            if row['status'] == 'duplicate' and row['duplicate_of']:
+                canonical = row['duplicate_of']
+            return {
+                'source_doc_id': row['source_doc_id'],
+                'canonical_doc_id': canonical,
+                'status': row['status'],
+                'sha256': row['sha256'],
+            }
+        return None
+
+    def mark_pre_download_duplicate(self, source_doc_id: str, duplicate_of: str, reason: str):
+        self.db.execute(
+            "UPDATE documents SET status='duplicate',duplicate_of=?,last_error=?,updated_at=? WHERE source_doc_id=?",
+            (duplicate_of, reason, now_iso(), source_doc_id),
+        )
+        self.db.commit()
+        self.event('pre_download_duplicate', {
+            'source_doc_id': source_doc_id,
+            'duplicate_of': duplicate_of,
+            'reason': reason,
+        })
 
     def mark_attempt(self, source_doc_id: str):
         self.db.execute("UPDATE documents SET attempts=attempts+1,updated_at=? WHERE source_doc_id=?", (now_iso(), source_doc_id))
