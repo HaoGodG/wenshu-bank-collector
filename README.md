@@ -45,16 +45,23 @@ cprq=2026-03-17 TO 2026-03-31
 
 不再做 +/-1 天扩张，避免相邻切片重叠。
 
-请求层面继续以 `queryCondition.cprq` 为活动条件，同时：
+日期列表查询现在直接复用网页自己的模块链：
 
-- `readUrlParam: false`，避免地址栏旧参数污染；
-- 显式带当前 `pageId`；
-- 显式镜像当前 `s17=银行`；
-- 显式镜像当前 `cprqStart/cprqEnd`；
-- `queryCondition` 使用与网页 `JSON.stringify` 一致的紧凑 JSON。
+```text
+addParams1545035259000
+  -> loadData1545184311000
+  -> $.WebSite.refreshModule
+  -> queryDoc
+```
 
-如果后端连续两次成功响应但仍丢失 `cprq`，程序会刷新检索页、获取新的
-`pageId`，再重试当前切片，而不是在同一异常页面上下文中机械重发。
+程序只负责把当前条件写入网页“已选条件”区域、设置排序/分页，并在查询结束后读取
+`$.WebSite.getModuleData("1545184311000")` 中网页已经解密的结果。
+
+之前直接调用 `$.WebSite.getData(queryDoc)` 的方式已不再用于日期查询，因为真实登录态下它会稳定出现
+“`s17` 被接受但 `cprq` 被后端静默丢弃”的情况。
+
+`probe-date` 会先按 HAR 中网页默认排序 `s50:desc` 验证一次；如果正式配置使用
+`s51:desc`，再继续验证裁判日期倒序，两个排序都必须保留日期条件。
 
 ## 本地数据作为续跑与去重依据
 
