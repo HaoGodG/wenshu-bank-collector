@@ -50,13 +50,13 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             {'key': 's17', 'value': '银行'},
             {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
         ]
-        await b.query(c, 1, 15, 's51:desc')
+        await b.query(c, 1, 15, 's50:desc')
         cfg, p = b.captured[-1]
         self.assertTrue(cfg.endswith('@queryDoc'))
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(p['cprqStart'], '2026-03-17')
         self.assertEqual(p['cprqEnd'], '2026-03-31')
-        self.assertEqual(p['sortFields'], 's51:desc')
+        self.assertEqual(p['sortFields'], 's50:desc')
         self.assertEqual(p['pageNum'], 1)
         self.assertEqual(p['pageSize'], 15)
         self.assertEqual(json.loads(p['queryCondition']), c)
@@ -119,6 +119,15 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(row['event_type'], 'probe')
             self.assertTrue(row['recorded_at'])
             self.assertEqual(row['payload'], {'ok': True})
+
+    def test_runner_defaults_to_date_safe_s50_sort(self):
+        r = CollectorRunner(
+            {'page_size': 15},
+            Path('/tmp'),
+            object(),
+            object(),
+        )
+        self.assertEqual(r.sort, 's50:desc')
 
     def test_site_limit_is_hard_capped_600(self):
         r = CollectorRunner(
