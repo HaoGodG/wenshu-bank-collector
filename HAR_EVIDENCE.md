@@ -192,3 +192,70 @@ data/03_采集运行记录/query_debug.jsonl
 即日期条件会先进入页面“已选条件”模块，再由 `loadData1545184311000` 生成实际列表请求。
 
 因此当前修复不再把日期切片当成纯无状态 XHR 参数切换。每个新日期切片会先用带条件的搜索页 URL 让官网 onload 初始化一次；之后 direct queryDoc 仍可继续用于排序/分页。若 direct queryDoc 再次静默丢日期，则同一次运行自动回退到当前页面的官网 `loadData1545184311000`，并继续 fail-closed 验证后端 `s31`。
+
+
+## 8. 2026-09-21 第二次 probe：排序字段是当前可复现触发条件
+
+`run_id=a34c4cd339c04d7a83dbdab15da982f9` 给出了同一页面内的对照：
+
+### 官网页面初始化（成功）
+
+```text
+pageId=300e6f6a...
+cprqStart=2026-03-17
+cprqEnd=2026-03-31
+s17=银行
+sortFields=s50:desc
+queryCondition=[cprq, s17]
+```
+
+后端：
+
+```text
+s31 GREATER 2026-03-17
+s31 LESS    2026-03-31
+s17 EQUAL   银行某
+resultCount=386
+```
+
+说明页面初始化修复是有效的，日期条件已经真正进入后端。
+
+### 随后 direct queryDoc（失败）
+
+同一个 pageId、同一个 Referer、同一组日期与银行条件，改为：
+
+```text
+sortFields=s51:desc
+pageSize=15
+```
+
+后端立即退化为：
+
+```text
+s17 EQUAL 银行某
+resultCount=24279
+```
+
+日期 `s31` 消失。
+
+### 官网 loadData fallback（同样失败）
+
+随后调用官网自己的 `loadData1545184311000`，请求仍带正确
+`cprqStart/cprqEnd/s17/queryCondition`，但只要 `sortFields=s51:desc`，
+后端仍只保留 `s17`。
+
+### 排除 pageSize 与 queryCondition 顺序
+
+旧 HAR 还有一个真实请求：
+
+```text
+sortFields=s50:desc
+pageSize=5
+queryCondition=[s17, cprq]
+```
+
+该日期条件被后端正常接受。
+
+因此 `pageSize` 和条件顺序都不能解释本次差异。当前真实环境中，可重复观察到的关键触发字段是 `sortFields=s51:desc`。
+
+正式日期采集因此固定使用官网默认 `s50:desc`，并在浏览器层阻止带 `cprq` 的请求使用 `s51:*`。
