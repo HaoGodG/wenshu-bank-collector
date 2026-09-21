@@ -63,6 +63,14 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             {'key': 'cprq', 'value': '2026-03-16 TO 2026-04-01'},
         ]
         await b.query(conditions, 1, 15, 's51:desc')
+        _, p = b.captured[-1]
+        self.assertEqual(p['cprqStart'], '2026-03-16')
+        self.assertEqual(p['cprqEnd'], '2026-04-01')
+        self.assertEqual(
+            p['queryCondition'],
+            '[{"key":"s17","value":"银行"},{"key":"cprq","value":"2026-03-16 TO 2026-04-01"}]'
+        )
+
         await b.query(conditions, 2, 15, 's51:desc')
         self.assertEqual(b.page.preflights, [
             {'startDate': '2026-03-16', 'endDate': '2026-04-01'}
