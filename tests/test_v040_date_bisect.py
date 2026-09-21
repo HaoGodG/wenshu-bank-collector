@@ -15,10 +15,10 @@ def test_bisect_2026_halves_without_gap():
     assert left[1].toordinal() + 1 == right[0].toordinal()
 
 
-def test_wire_range_expands_inclusive_boundaries():
+def test_wire_range_matches_website_inclusive_dates():
     c = with_date_condition([Condition('s17', '银行')], date(2026, 1, 1), date(2026, 6, 30))
     assert c[-1].key == 'cprq'
-    assert c[-1].value == '2025-12-31 TO 2026-07-01'
+    assert c[-1].value == '2026-01-01 TO 2026-06-30'
 
 
 def test_har_date_backend_translation_is_accepted():
@@ -33,15 +33,15 @@ def test_har_date_backend_translation_is_accepted():
     assert missing == []
 
 
-def test_cprq_stays_only_in_query_condition():
+def test_cprq_is_mirrored_from_current_condition_not_url():
     p = {'queryCondition': '[]'}
     WenshuBrowser._inject_wire_conditions(p, [
         {'key': 's17', 'value': '银行'},
-        {'key': 'cprq', 'value': '2025-12-31 TO 2026-07-01'},
+        {'key': 'cprq', 'value': '2026-03-16 TO 2026-04-01'},
     ])
     assert p['s17'] == '银行'
-    assert 'cprqStart' not in p
-    assert 'cprqEnd' not in p
+    assert p['cprqStart'] == '2026-03-16'
+    assert p['cprqEnd'] == '2026-04-01'
     assert 'cprq' not in p
 
 
