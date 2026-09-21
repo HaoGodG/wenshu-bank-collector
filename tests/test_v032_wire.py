@@ -20,6 +20,9 @@ class CaptureBrowser(WenshuBrowser):
         self.page = FakePage()
         self.captured = []
 
+    async def _sync_query_url(self, conditions):
+        return 'https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html?pageId=test'
+
     async def _site_get_data(self, cfg, param):
         self.captured.append((cfg, dict(param)))
         if cfg.endswith('@leftDataItem'):
@@ -100,6 +103,33 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             b.page.asserted_payload,
             {'startDate': '2026-03-16', 'endDate': '2026-04-01'}
         )
+
+    async def test_sync_query_url_puts_current_date_into_referer_shape(self):
+        class UrlPage:
+            def __init__(self):
+                self.expression = ''
+                self.payload = None
+            async def evaluate(self, expression, payload):
+                self.expression = expression
+                self.payload = payload
+                return (
+                    'https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html'
+                    '?pageId=test&cprqStart=2026-03-17&cprqEnd=2026-03-31&s17=%E9%93%B6%E8%A1%8C'
+                )
+
+        b = WenshuBrowser.__new__(WenshuBrowser)
+        b.page = UrlPage()
+        url = await b._sync_query_url([
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
+        ])
+        self.assertIn("history.replaceState", b.page.expression)
+        self.assertEqual(
+            b.page.payload,
+            {'cprq': '2026-03-17 TO 2026-03-31', 's17': '银行'}
+        )
+        self.assertIn('cprqStart=2026-03-17', url)
+        self.assertIn('cprqEnd=2026-03-31', url)
 
     async def test_site_get_data_disables_url_param_merge(self):
         class CapturePage:
