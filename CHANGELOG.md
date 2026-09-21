@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.0 branch fix — 0316/0401 HAR
+
+- 新 HAR 证明 `2026-03-16 TO 2026-04-01` 可被后端正常解析并返回 458 条，日期值本身不是失败原因。
+- 日期切片不再做 +/-1 天扩张，逻辑区间按网页原样发送，避免相邻切片重叠。
+- 在关闭 URL 参数自动合并的前提下，显式发送当前 `cprqStart/cprqEnd`、`s17`、`pageId`。
+- `queryCondition` 改为紧凑 JSON，进一步贴近网页 `JSON.stringify` 请求形态。
+- 日期条件连续两次被后端静默丢弃时，刷新检索页并使用新的 `pageId` 再试。
+- 新增下载前高置信元数据去重：案号 + 法院 + 裁判日期 + 规范化完整标题全部一致时，跨 docId 直接跳过下载。
+- 保留下载后 SHA-256 去重作为最终兜底。
+
 ## v0.4.0 branch fix — HAR request isolation
 
 - 根据 `bank-core-date(1).har` 修正日期请求组装：活动日期只使用 `queryCondition.cprq`。
