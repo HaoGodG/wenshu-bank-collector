@@ -93,10 +93,10 @@ async def probe_date(cfg, output, start_text: str, end_text: str):
         print(f'日期切片验证: logical={start} ~ {end}')
         print(f'wire cprq={wire}')
         print(f'排序: {runner.sort}')
-        print('请求方式: 新日期切片先按官网页面 URL 初始化检索上下文，再使用历史 direct queryDoc；若后端仍丢日期则同次运行自动回退官网 loadData。')
+        print('请求方式: 新日期切片先按官网 URL 初始化，再严格使用网页 loadData 原生排序/分页链路。')
         print('网络诊断日志:', query_debug_path(output))
         print('诊断 run_id:', browser.debug_run_id)
-        print('probe-date 不下载文书；本次运行会自动记录页面初始化、direct queryDoc 及必要时的官网 loadData 回退。')
+        print('probe-date 不下载文书；当前请求形态按手工成功排序 HAR：s51 + pageSize=5 + 官网 loadData。')
 
         data = await runner.query_checked(conditions, 1)
         qp = (data or {}).get('queryParams') or {}
