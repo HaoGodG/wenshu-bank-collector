@@ -29,13 +29,11 @@ s17=银行
 
 ## 日期协议
 
-真实 HAR 已确认：
+真实 HAR 与失败请求诊断已经确认：
 
-- 网页会直接发送用户选择的日期范围，例如 `2026-03-16 TO 2026-04-01`；
-- 后端响应将日期条件表示为 `s31 GREATER ...` + `s31 LESS ...`；
-- 同一查询结果中实际存在结束日当天的文书，因此不能把 `LESS` 当成严格数学意义的开区间。
-
-所以当前日期切片与网页保持一致，逻辑区间原样发送：
+- 网页直接发送用户选择的日期范围，例如 `2026-03-16 TO 2026-04-01`；
+- 后端把有效日期条件表示为 `s31 GREATER ...` + `s31 LESS ...`；
+- 同一查询结果中可以出现结束日当天文书，因此日期切片原样发送，不再 +/-1。
 
 ```text
 2026-03-17 ~ 2026-03-31
@@ -43,32 +41,50 @@ s17=银行
 cprq=2026-03-17 TO 2026-03-31
 ```
 
-不再做 +/-1 天扩张，避免相邻切片重叠。
+### 已定位的日期丢失差异
 
-日期查询继续使用历史实际采集已经成功过的 direct `queryDoc` 路径。程序会同时发送
-顶层 `s17/cprqStart/cprqEnd` 与 `queryCondition`，并通过后端返回的
-`queryParams.queryItemList` 校验日期是否真的被解析成 `s31`。如果日期条件被后端静默丢弃，
-程序会 fail-closed 停止当前检索，不会把错误结果继续下载。
+失败诊断日志显示，程序原先的页面流程是：
+
+```text
+打开 ?pageId=...
+→ 页面自动 queryDoc(queryCondition=[])
+→ 程序再 direct queryDoc(s17+cprq)
+→ HTTP 200，但后端只保留 s17，cprq 被静默丢弃
+```
+
+而成功手工 HAR 是：
+
+```text
+打开 ?pageId=...&cprqStart=...&cprqEnd=...&s17=银行
+→ 页面 onload 从 URL 恢复条件
+→ addParams(...)
+→ loadData()
+→ 第一笔 queryDoc 就带 s17+cprq
+→ 后端返回 s31 日期条件
+```
+
+官网页面源码也明确按这个顺序初始化检索状态。
+
+因此当前实现对每一个新的日期切片先用官网 URL 方式重新初始化页面日期上下文。
+初始化成功后仍优先使用历史实际采集成功过的 direct `queryDoc` 做排序和分页；
+如果 direct 请求再次出现“HTTP 200 但 cprq 被后端丢弃”，程序会在同一次运行自动切换到
+官网 `loadData1545184311000 -> refreshModule` 路径，并对后续页面继续使用该路径。
+
+任何路径都必须经过 `queryParams.queryItemList` 校验，只有后端真实返回对应 `s31` 才继续采集。
 
 ### 日期问题诊断
-
-可只验证一个日期切片，不下载文书：
 
 ```bash
 python main.py probe-date --start-date 2026-03-17 --end-date 2026-03-31
 ```
 
-诊断命令只发送 1 次 `queryDoc`；失败后直接保留证据退出，不在同一次 probe 中机械重试。
-
-运行时会自动把真实 `queryDoc` 网络请求和解密后的关键响应字段追加到：
+不下载文书。真实请求和解密后的关键响应继续追加到：
 
 ```text
 data/03_采集运行记录/query_debug.jsonl
 ```
 
-日志每次运行都有独立 `run_id` 和时间戳。会记录实际 form、Referer、Origin、
-`queryCondition`、日期、排序、分页以及后端 `queryItemList`；Cookie 不记录，
-`ciphertext` 只记录长度和 SHA-256，不保存原文。即使 Chrome 后续崩溃，请求发出时已落盘的记录仍会保留。
+日志带 `run_id` 与时间戳，不记录 Cookie；`ciphertext` 只记录长度和 SHA-256。
 
 ## 本地数据作为续跑与去重依据
 
