@@ -296,17 +296,22 @@ class WenshuBrowser:
         if value is None or current == value:
             self._prepared_cprq = None
 
+    async def recover_query_context(self):
+        """Get a fresh search-page/pageId while preserving the persistent login."""
+        print("[browser] 重新建立检索页上下文并获取新的 pageId。")
+        await self.open_search_page(require_ready=True)
+        info = await self._wait_user_info(attempts=4, delay=0.8)
+        if not self._is_logged_in(info):
+            raise RuntimeError("刷新检索页后登录态失效，请在浏览器中重新登录后重试。")
+        self._prepared_cprq = None
+
     @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
-        """Mirror only the HAR-proven compatibility field.
+        """Mirror the browser request shape without inheriting stale URL state.
 
-        The active filters are carried by queryCondition.  The supplied HAR
-        shows cprqStart/cprqEnd can remain stale URL values while
-        queryCondition.cprq changes.  Therefore date conditions must not be
-        copied into top-level cprqStart/cprqEnd.
-
-        Keep s17 mirrored at top level because the bank-party request carries
-        it both top-level and inside queryCondition.
+        queryCondition remains authoritative, but real browser requests also
+        carry s17 and cprqStart/cprqEnd at top level.  We set those from the
+        CURRENT condition set while getData runs with readUrlParam=false.
         """
         s17_values = [
             str(item.get("value") or "")
@@ -315,6 +320,12 @@ class WenshuBrowser:
         ]
         if len(s17_values) == 1:
             param["s17"] = s17_values[0]
+
+        cprq = WenshuBrowser._extract_cprq(conditions)
+        if cprq and " TO " in cprq:
+            start_date, end_date = [x.strip() for x in cprq.split(" TO ", 1)]
+            param["cprqStart"] = start_date
+            param["cprqEnd"] = end_date
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
@@ -325,7 +336,7 @@ class WenshuBrowser:
             "ciphertext": ciphertext,
             "pageNum": page_num,
             "pageSize": page_size,
-            "queryCondition": json.dumps(conditions, ensure_ascii=False)
+            "queryCondition": json.dumps(conditions, ensure_ascii=False, separators=(",", ":"))
         }
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
@@ -336,7 +347,7 @@ class WenshuBrowser:
         param = {
             "groupFields": group_field,
             "facetLimit": 1000,
-            "queryCondition": json.dumps(conditions, ensure_ascii=False),
+            "queryCondition": json.dumps(conditions, ensure_ascii=False, separators=(",", ":")),
         }
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@leftDataItem", param)
