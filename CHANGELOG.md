@@ -4,7 +4,9 @@
 
 - 新 HAR 证明 `2026-03-16 TO 2026-04-01` 可被后端正常解析并返回 458 条，日期值本身不是失败原因。
 - 日期切片不再做 +/-1 天扩张，逻辑区间按网页原样发送，避免相邻切片重叠。
-- 恢复并保留历史实际采集已经成功过的 direct `queryDoc` 路径；不再把“原生模块链必须替代 direct queryDoc”作为结论。
+- 保留历史实际采集已经成功过的 direct `queryDoc` 路径，但新日期切片先按官网带条件 URL 完成页面 onload 初始化。
+- 自动诊断确认失败请求已在线路上发送完整 cprq，但页面此前先以空条件初始化，后端随后静默丢弃 cprq。
+- direct queryDoc 若在已初始化日期上下文中仍丢 cprq，则同次运行自动回退官网 `loadData1545184311000 -> refreshModule`，无需人工重跑。
 - 保留顶层 `s17/cprqStart/cprqEnd` + `queryCondition` 的请求形态，并继续对后端 `queryItemList` 做 fail-closed 校验。
 - 移除未被证据支持的日期预提交、Referer/pageId 恢复等假设性修复逻辑。
 - 新增 `probe-date --start-date ... --end-date ...`，单独验证指定日期切片且不下载文书。
