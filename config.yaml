@@ -3,6 +3,13 @@ browser:
   profile_dir: ./.browser-profile
   login_url: https://wenshu.court.gov.cn/website/wenshu/181010CARHS5BS3C/index.html?open=login
   search_url: https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html
+
+  # 登录态失效时，自动填充官网登录页并点击登录；验证码仍由用户在浏览器中手工完成。
+  auto_login: true
+  login_username_env: WENSHU_USERNAME
+  login_password_env: WENSHU_PASSWORD
+  login_page_timeout_seconds: 60
+  login_wait_timeout_seconds: 600
   site_ready_timeout_seconds: 90
   site_ready_reload_attempts: 3
   query_wait_timeout_seconds: 600
