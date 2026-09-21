@@ -16,6 +16,7 @@ class WenshuBrowser:
         self.debug_log_path = Path(debug_log_path) if debug_log_path else None
         self.debug_run_id = uuid.uuid4().hex
         self._date_context_key = None
+        self._date_native_only_key = None
 
     def _debug_append(self, event_type: str, payload: dict):
         if not self.debug_log_path:
@@ -176,6 +177,7 @@ class WenshuBrowser:
 
     async def open_search_page(self, *, require_ready: bool = True):
         self._date_context_key = None
+        self._date_native_only_key = None
         page_id = uuid.uuid4().hex
         url = f"{self.cfg['search_url']}?pageId={page_id}"
         # 检索页本身偶尔也会因页面脚本二次导航产生 ERR_ABORTED；只要最终页面仍
@@ -435,15 +437,103 @@ class WenshuBrowser:
             "resultCount": qr.get("resultCount"),
         })
         self._date_context_key = key
+        self._date_native_only_key = None
+
+    @staticmethod
+    def _response_has_date(data: dict, raw: str) -> bool:
+        if not raw or " TO " not in raw:
+            return True
+        start_date, end_date = [x.strip() for x in raw.split(" TO ", 1)]
+        items = (((data or {}).get("queryParams") or {}).get("queryItemList") or [])
+        norm = lambda v: str(v or "").replace("\\-", "-")
+        has_start = any(
+            str(x.get("id") or x.get("key") or "") == "s31"
+            and norm(x.get("value")) == start_date
+            and str(x.get("oper") or "").upper() in ("GREATER", "GT", ">")
+            for x in items if isinstance(x, dict)
+        )
+        has_end = any(
+            str(x.get("id") or x.get("key") or "") == "s31"
+            and norm(x.get("value")) == end_date
+            and str(x.get("oper") or "").upper() in ("LESS", "LT", "<")
+            for x in items if isinstance(x, dict)
+        )
+        return has_start and has_end
+
+    async def _native_query_current_date_context(self, page_num: int, page_size: int, sort_fields: str):
+        timeout_ms = max(1, int(self.cfg.get("query_wait_timeout_seconds", 600))) * 1000
+        payload = {
+            "pageNum": int(page_num),
+            "pageSize": int(page_size),
+            "sortFields": str(sort_fields or "s50:desc"),
+        }
+        js = r'''({pageNum, pageSize, sortFields}) => {
+          if (typeof loadData1545184311000 !== 'function') {
+            return {ok:false, reason:'loadData1545184311000 missing'};
+          }
+          const $m = $('#_view_1545184311000');
+          const parts = String(sortFields || 's50:desc').split(':', 2);
+          const sortKey = parts[0] || 's50';
+          const sortDir = (parts[1] || 'desc').toLowerCase();
+          $m.find('.tool_PX').removeClass('tool_On tool_OnUp');
+          const $sort = $m.find(".tool_PX[data-value='" + sortKey + "']").first();
+          if ($sort.length) {
+            $sort.addClass(sortDir === 'asc' ? 'tool_OnUp' : 'tool_On');
+          }
+          const $size = $m.find('select.pageSizeSelect').first();
+          if ($size.length) $size.val(String(pageSize));
+          const postData = loadData1545184311000({
+            searchMid: '1545035259000',
+            seniorMid: '1545034775000',
+            postData: {},
+            pageNum: pageNum
+          });
+          return {ok: postData !== false};
+        }'''
+        async with self.page.expect_response(
+            lambda r: self._is_query_doc_request(r.request),
+            timeout=timeout_ms,
+        ) as response_info:
+            started = await self.page.evaluate(js, payload)
+            if not isinstance(started, dict) or not started.get("ok"):
+                reason = started.get("reason") if isinstance(started, dict) else started
+                raise RuntimeError(f"网页原生日期查询启动失败: {reason}")
+        response = await response_info.value
+        await response.finished()
+        await self.page.wait_for_function(
+            r'''({pageNum, sortFields}) => {
+              try {
+                const d = $.WebSite.getModuleData('1545184311000');
+                const qp = (d || {}).queryParams || {};
+                return String(qp.sortFields || '') === String(sortFields)
+                  && Number(qp.pageNum || 1) === Number(pageNum);
+              } catch(e) { return false; }
+            }''',
+            arg=payload,
+            timeout=timeout_ms,
+        )
+        data = await self.page.evaluate(
+            "() => $.WebSite.getModuleData('1545184311000')"
+        )
+        data = data or {}
+        self._log_decoded_query({
+            "mode": "native-date-context",
+            "pageNum": page_num,
+            "pageSize": page_size,
+            "sortFields": sort_fields,
+        }, data)
+        return data
 
     def invalidate_date_context(self, value: str | None = None):
         if value is None:
             self._date_context_key = None
+            self._date_native_only_key = None
             return
         # The cached key contains the serialized cprq value; invalidate only
         # when it refers to the failed slice.
         if self._date_context_key and value in self._date_context_key:
             self._date_context_key = None
+            self._date_native_only_key = None
 
     @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
@@ -474,7 +564,13 @@ class WenshuBrowser:
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        raw_date = self._date_context_value(conditions)
+        date_key = self._date_context_key_for(conditions)
         await self._ensure_date_page_context(conditions)
+
+        if raw_date and self._date_native_only_key == date_key:
+            return await self._native_query_current_date_context(page_num, page_size, sort_fields)
+
         ciphertext = await self.page.evaluate("cipher()")
         param = {
             "sortFields": sort_fields,
@@ -487,6 +583,19 @@ class WenshuBrowser:
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
         data = data or {}
         self._log_decoded_query(param, data)
+
+        # Keep the historically successful direct path when it works.  If the
+        # backend silently drops cprq, immediately fall back within the same
+        # run to the website's own loadData/refreshModule path, using the
+        # already-initialized official date context.
+        if raw_date and not self._response_has_date(data, raw_date):
+            self._date_native_only_key = date_key
+            self._debug_append("date_direct_fallback_native", {
+                "cprq": raw_date,
+                "pageNum": page_num,
+                "sortFields": sort_fields,
+            })
+            return await self._native_query_current_date_context(page_num, page_size, sort_fields)
         return data
 
     async def facet(self, conditions: list[dict], group_field: str):
