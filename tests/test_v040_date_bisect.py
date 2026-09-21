@@ -45,15 +45,16 @@ def test_cprq_is_mirrored_from_current_condition_not_url():
     assert 'cprq' not in p
 
 
-def test_s50_resume_policy_is_not_assumed_by_runner(tmp_path):
+def test_probe_defaults_keep_resume_disabled_until_native_s51_is_verified(tmp_path):
     db = StateDB(tmp_path / 'state.sqlite3')
     r = CollectorRunner(
-        {'page_size': 15, 'sort_fields': 's50:desc', 'resume_from_local_latest': False},
+        {'page_size': 5, 'sort_fields': 's51:desc', 'resume_from_local_latest': False},
         tmp_path,
         db,
         object(),
     )
-    assert r.sort == 's50:desc'
+    assert r.sort == 's51:desc'
+    assert r.page_size == 5
     assert r.resume_from_local_latest is False
     db.close()
 
