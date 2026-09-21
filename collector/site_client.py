@@ -249,6 +249,42 @@ class WenshuBrowser:
         ]
         return values[0] if len(values) == 1 and values[0] else None
 
+    async def _sync_query_url(self, conditions: list[dict]) -> str:
+        """Keep the document URL in the same shape as successful browser HARs.
+
+        The server sees the page URL as the XHR Referer.  Real successful date
+        searches have cprqStart/cprqEnd present in that URL; a clean
+        ?pageId-only page repeatedly caused queryDoc to accept s17 but silently
+        drop cprq.  replaceState changes only the current document URL and does
+        not navigate or create a new session.
+        """
+        cprq = self._extract_cprq(conditions)
+        s17_values = [
+            str(item.get("value") or "").strip()
+            for item in conditions or []
+            if str(item.get("key") or "").strip() == "s17"
+        ]
+        s17 = s17_values[0] if len(s17_values) == 1 and s17_values[0] else None
+
+        js = r'''({cprq, s17}) => {
+          const u = new URL(window.location.href);
+          u.searchParams.delete('cprqStart');
+          u.searchParams.delete('cprqEnd');
+          u.searchParams.delete('s17');
+
+          if (cprq && cprq.includes(' TO ')) {
+            const parts = cprq.split(' TO ', 2);
+            u.searchParams.set('cprqStart', parts[0].trim());
+            u.searchParams.set('cprqEnd', parts[1].trim());
+          }
+          if (s17) {
+            u.searchParams.set('s17', s17);
+          }
+          history.replaceState(history.state, document.title, u.pathname + '?' + u.searchParams.toString());
+          return window.location.href;
+        }'''
+        return await self.page.evaluate(js, {"cprq": cprq, "s17": s17})
+
     async def _prepare_date_filter(self, conditions: list[dict], *, force: bool = False):
         """Mirror the site's own advanced-search date submit hook.
 
@@ -329,6 +365,7 @@ class WenshuBrowser:
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        await self._sync_query_url(conditions)
         await self._prepare_date_filter(conditions)
         ciphertext = await self.page.evaluate("cipher()")
         param = {
@@ -343,6 +380,7 @@ class WenshuBrowser:
         return data or {}
 
     async def facet(self, conditions: list[dict], group_field: str):
+        await self._sync_query_url(conditions)
         await self._prepare_date_filter(conditions)
         param = {
             "groupFields": group_field,
