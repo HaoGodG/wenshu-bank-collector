@@ -1,0 +1,14 @@
+{
+  "version": "0.4.0",
+  "total": 1,
+  "strategy": "银行作为当事人；年份定位 + 日期递归二分；本地成功下载记录最大裁判日期作为可选回溯上界；docId 本地去重",
+  "seeds": [
+    {
+      "group": "BANK_PARTY",
+      "name": "银行作为当事人",
+      "topics": ["BANK_PARTY"],
+      "conditions": [{"key": "s17", "value": "银行"}],
+      "enabled": true
+    }
+  ]
+}

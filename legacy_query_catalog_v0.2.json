@@ -1,0 +1,2163 @@
+{
+  "version": "0.2.0",
+  "total": 117,
+  "strategy": "每个检索条件按裁判日期倒序取网站可见前600条；docId全局去重",
+  "seeds": [
+    {
+      "group": "A01_贷款与债权",
+      "name": "金融借款合同纠纷",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9178"
+        }
+      ],
+      "note": "银行信贷核心案由",
+      "enabled": true
+    },
+    {
+      "group": "A01_贷款与债权",
+      "name": "金融不良债权转让合同纠纷",
+      "topics": [
+        "S03",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9183"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A01_贷款与债权",
+      "name": "金融不良债权追偿纠纷",
+      "topics": [
+        "S03",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9184"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A01_贷款与债权",
+      "name": "银行借款合同纠纷（补充）",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9177"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "补充未落入金融借款子案由的银行借款文书",
+      "enabled": true
+    },
+    {
+      "group": "A01_贷款与债权",
+      "name": "银行融资租赁合同纠纷",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9199"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A02_账户存款与结算",
+      "name": "储蓄存款合同纠纷",
+      "topics": [
+        "S01"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9190"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A02_账户存款与结算",
+      "name": "银行结算合同纠纷",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9287"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A03_银行卡",
+      "name": "银行卡纠纷",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9191"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A03_银行卡",
+      "name": "借记卡纠纷",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9192"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A03_银行卡",
+      "name": "信用卡纠纷",
+      "topics": [
+        "S02",
+        "S07",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9193"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行保证合同纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9185"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行抵押合同纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9186"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行质押合同纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9187"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行担保物权确认纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9055"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行抵押权纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9102"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行质权纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9111"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行申请实现担保物权案件",
+      "topics": [
+        "S04",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s13",
+          "value": "9860"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行票据质权纠纷",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9115"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A04_担保与担保物权",
+      "name": "银行基金份额质权纠纷",
+      "topics": [
+        "S04",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9121"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A05_理财代销",
+      "name": "金融委托理财合同纠纷",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9243"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A05_理财代销",
+      "name": "银行委托理财合同纠纷（补充）",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9242"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A05_理财代销",
+      "name": "银行保险代理合同纠纷",
+      "topics": [
+        "S09",
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9683"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A05_理财代销",
+      "name": "银行保证保险合同纠纷",
+      "topics": [
+        "S03",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s15",
+          "value": "9675"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "银行票据付款请求权纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9687"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "银行票据追索权纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9688"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "银行票据保证纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9694"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "银行确认票据无效纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9695"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "委托开立信用证纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9699"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "信用证开证纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9700"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "信用证议付纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9701"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "信用证欺诈纠纷",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9702"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "信用证融资纠纷",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9703"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "信用证转让纠纷",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9704"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "申请中止支付信用证项下款项",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9810"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A06_票据与贸易金融",
+      "name": "申请中止支付保函项下款项",
+      "topics": [
+        "S04",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "9811"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "骗取贷款、票据承兑、金融票证罪",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "4149"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "违法向关系人发放贷款罪",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "111"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "违法发放贷款罪",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "112"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "用账外客户资金非法拆借、发放贷款罪",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "113"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "非法出具金融票证罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "114"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "违规出具金融票证罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "4166"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "对违法票据承兑、付款、保证罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "115"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "贷款诈骗罪",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "120"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "票据诈骗罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "121"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "金融凭证诈骗罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "122"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "信用证诈骗罪",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "123"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "信用卡诈骗罪",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "124"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "妨害信用卡管理罪",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "4150"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "窃取、收买、非法提供信用卡信息罪",
+      "topics": [
+        "S02",
+        "S06",
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "4151"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "A07_银行相关刑事",
+      "name": "银行非法吸收公众存款罪",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s14",
+          "value": "102"
+        },
+        {
+          "key": "s21",
+          "value": "银行"
+        }
+      ],
+      "note": "用银行关键词降低非银行主体噪声",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行账户相关",
+      "topics": [
+        "S01"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "账户"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行账户冻结相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "冻结"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行止付相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "止付"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行扣划相关",
+      "topics": [
+        "S01",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "扣划"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行挂失相关",
+      "topics": [
+        "S01",
+        "S02"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "挂失"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行冒名开户相关",
+      "topics": [
+        "S01",
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "冒名开户"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行转账相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "转账"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行支付结算相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "支付结算"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行存款相关",
+      "topics": [
+        "S01"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "存款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B01_账户存款支付补漏",
+      "name": "银行结构性存款相关",
+      "topics": [
+        "S01",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "结构性存款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B02_银行卡与支付补漏",
+      "name": "银行卡盗刷相关",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "盗刷"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B02_银行卡与支付补漏",
+      "name": "银行ATM相关",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "自动取款机"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B02_银行卡与支付补漏",
+      "name": "银行短信验证码相关",
+      "topics": [
+        "S02",
+        "S06",
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "短信验证码"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B02_银行卡与支付补漏",
+      "name": "银行非本人交易相关",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "非本人交易"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B02_银行卡与支付补漏",
+      "name": "银行快捷支付相关",
+      "topics": [
+        "S02",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "快捷支付"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行委托贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "委托贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行保理相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "保理"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行供应链金融相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "供应链金融"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行银团贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "银团贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行流动资金贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "流动资金贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行个人贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "个人贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行住房贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "住房贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B03_信贷补漏",
+      "name": "银行消费贷款相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "消费贷款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B04_担保补漏",
+      "name": "银行最高额保证相关",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "最高额保证"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B04_担保补漏",
+      "name": "银行最高额抵押相关",
+      "topics": [
+        "S04"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "最高额抵押"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B04_担保补漏",
+      "name": "银行保函相关",
+      "topics": [
+        "S04",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "保函"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B05_征信",
+      "name": "银行征信相关",
+      "topics": [
+        "S05"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "征信"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B05_征信",
+      "name": "银行信用报告相关",
+      "topics": [
+        "S05"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "信用报告"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B05_征信",
+      "name": "银行不良记录相关",
+      "topics": [
+        "S05"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "不良记录"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B05_征信",
+      "name": "银行征信异议相关",
+      "topics": [
+        "S05"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "征信异议"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B06_支付与诈骗补漏",
+      "name": "银行电信诈骗相关",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "电信诈骗"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B06_支付与诈骗补漏",
+      "name": "银行网络诈骗相关",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "网络诈骗"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B06_支付与诈骗补漏",
+      "name": "银行第三方支付相关",
+      "topics": [
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "第三方支付"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行金融消费者相关",
+      "topics": [
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "金融消费者"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行消费者权益相关",
+      "topics": [
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "消费者权益"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行格式条款相关",
+      "topics": [
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "格式条款"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行告知义务相关",
+      "topics": [
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "告知义务"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行适当性相关",
+      "topics": [
+        "S07",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "适当性"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行风险揭示相关",
+      "topics": [
+        "S07",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "风险揭示"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B07_金融消费者保护",
+      "name": "银行销售误导相关",
+      "topics": [
+        "S07",
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "销售误导"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B08_个人信息保护",
+      "name": "银行个人信息相关",
+      "topics": [
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "个人信息"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B08_个人信息保护",
+      "name": "银行隐私相关",
+      "topics": [
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "隐私"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B08_个人信息保护",
+      "name": "银行信息泄露相关",
+      "topics": [
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "信息泄露"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B08_个人信息保护",
+      "name": "银行人脸识别相关",
+      "topics": [
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "人脸识别"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B08_个人信息保护",
+      "name": "银行客户信息相关",
+      "topics": [
+        "S08"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "客户信息"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B09_理财与代销补漏",
+      "name": "银行理财产品相关",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "理财产品"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B09_理财与代销补漏",
+      "name": "银行基金代销相关",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "基金代销"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B09_理财与代销补漏",
+      "name": "银行保险代销相关",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "保险代销"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B09_理财与代销补漏",
+      "name": "银行信托代销相关",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "信托代销"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B09_理财与代销补漏",
+      "name": "银行代销相关",
+      "topics": [
+        "S09"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "代销"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行催收相关",
+      "topics": [
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "催收"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行逾期相关",
+      "topics": [
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "逾期"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行提前到期相关",
+      "topics": [
+        "S03",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "提前到期"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行不良债权相关",
+      "topics": [
+        "S03",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "不良债权"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行债权转让相关",
+      "topics": [
+        "S03",
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "债权转让"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B10_贷后与催收",
+      "name": "银行诉讼时效相关",
+      "topics": [
+        "S10"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "诉讼时效"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B11_反洗钱与KYC",
+      "name": "银行反洗钱相关",
+      "topics": [
+        "S01",
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "反洗钱"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B11_反洗钱与KYC",
+      "name": "银行客户身份识别相关",
+      "topics": [
+        "S01",
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "客户身份识别"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B11_反洗钱与KYC",
+      "name": "银行可疑交易相关",
+      "topics": [
+        "S01",
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "可疑交易"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B11_反洗钱与KYC",
+      "name": "银行大额交易相关",
+      "topics": [
+        "S01",
+        "S07"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "大额交易"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行国际结算相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "国际结算"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行贸易融资相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "贸易融资"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行福费廷相关",
+      "topics": [
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "福费廷"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行国内信用证相关",
+      "topics": [
+        "S03",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "国内信用证"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行外汇相关",
+      "topics": [
+        "S01",
+        "S03"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "外汇"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行结售汇相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "结售汇"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    },
+    {
+      "group": "B12_贸易金融与外汇补漏",
+      "name": "银行跨境支付相关",
+      "topics": [
+        "S01",
+        "S06"
+      ],
+      "conditions": [
+        {
+          "key": "s21",
+          "value": "银行"
+        },
+        {
+          "key": "s21",
+          "value": "跨境支付"
+        }
+      ],
+      "note": "",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+index,group,name,topics,conditions,note
+1,BANK_PARTY,银行作为当事人,BANK_PARTY,s17=银行,超过600按日期递归二分；本地docId/status去重

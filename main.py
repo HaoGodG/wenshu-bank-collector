@@ -1,0 +1,145 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import sys
+from pathlib import Path
+
+import yaml
+
+from collector.models import Condition, QuerySeed
+from collector.state import StateDB
+from collector.site_client import WenshuBrowser, FatalAccessRestriction
+from collector.runner import CollectorRunner
+from collector.exporter import Exporter
+
+ROOT = Path(__file__).resolve().parent
+VERSION = '0.4.0'
+
+
+def load_config(path: Path):
+    cfg = yaml.safe_load(path.read_text(encoding='utf-8'))
+    out = (cfg.get('storage') or {}).get('output_root') or ''
+    output = Path(out).expanduser() if out else ROOT / 'data'
+    output.mkdir(parents=True, exist_ok=True)
+    return cfg, output
+
+
+def seeds_from(cfg):
+    out = []
+    for q in cfg['collection'].get('query_seeds', []):
+        if q.get('enabled', True) is False:
+            continue
+        out.append(QuerySeed(q['name'], list(q.get('topics', [])), [
+            Condition(str(x['key']), str(x['value'])) for x in q.get('conditions', [])
+        ]))
+    return out
+
+
+async def collect(cfg, output):
+    state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
+    browser = WenshuBrowser(cfg['browser'], ROOT)
+    try:
+        await browser.start()
+        await browser.ensure_login()
+        seeds = seeds_from(cfg)
+        limit = min(int(cfg['collection'].get('site_visible_limit', 600)), 600)
+        print(f"登录态已确认。开始采集：{len(seeds)} 组主体检索条件；单一查询窗口最多 {limit} 条，超限按年份定位后递归日期二分；单日仍超限再 facet 拆分。")
+        runner = CollectorRunner(cfg['collection'], output, state, browser)
+        for i, seed in enumerate(seeds, 1):
+            print(f"\n##### 主体检索 {i}/{len(seeds)} #####")
+            await runner.run_seed(seed)
+        Exporter(output, state).export_all()
+        print("\n采集计划执行完成。", state.stats())
+    except FatalAccessRestriction as e:
+        print(f"\n站点明确访问限制：{e}\n已保留 checkpoint，不进行规避。", file=sys.stderr)
+    finally:
+        Exporter(output, state).export_all()
+        state.close()
+        await browser.stop()
+
+
+async def doctor(cfg, output):
+    browser = WenshuBrowser(cfg['browser'], ROOT)
+    try:
+        await browser.start()
+        info = await browser.ensure_login()
+        print("网站脚本与登录态正常。", bool(info))
+    finally:
+        await browser.stop()
+
+
+async def probe(cfg, output):
+    browser = WenshuBrowser(cfg['browser'], ROOT)
+    state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
+    try:
+        await browser.start()
+        await browser.ensure_login()
+        seeds = seeds_from(cfg)
+        if not seeds:
+            print('没有配置 query_seeds')
+            return
+        seed = seeds[0]
+        runner = CollectorRunner(cfg['collection'], output, state, browser)
+        print(f"验证种子: {seed.name}")
+        print('请求条件:', runner.cond_dicts(seed.conditions))
+        print('请求方式: 同时发送顶层条件参数 + queryCondition（与浏览器真实 HAR 一致）')
+        data = await runner.query_checked(seed.conditions, 1)
+        runner.verify_seed_conditions(seed.name, seed.conditions, data)
+        qp = (data or {}).get('queryParams') or {}
+        qr = (data or {}).get('queryResult') or {}
+        rows = qr.get('resultList') or []
+        print('后端 queryItemList:', qp.get('queryItemList'))
+        print('resultCount:', qr.get('resultCount'))
+        print('第一页前5条裁判日期:', [x.get('31') for x in rows[:5]])
+        print('第一页前5条当事人字段:', [x.get('17') or x.get('53') for x in rows[:5]])
+        years = await runner._years(seed.conditions)
+        print('裁判年份 facet（前10个）:', years[:10])
+        print('PROBE PASS：当事人检索条件已被后端接受；本命令未下载任何文书。')
+    finally:
+        state.close()
+        await browser.stop()
+
+
+def status(output):
+    state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
+    try:
+        print(state.stats())
+        print('本地成功下载记录最大裁判日期:', state.latest_success_decision_date())
+        Exporter(output, state).export_all()
+    finally:
+        state.close()
+
+
+def show_seeds(cfg):
+    seeds = seeds_from(cfg)
+    print(f'共 {len(seeds)} 组启用检索条件：')
+    for i, s in enumerate(seeds, 1):
+        cond = ' AND '.join(f'{c.key}={c.value}' for c in s.conditions)
+        print(f'{i:03d}. {s.name} | {cond} | {"/".join(s.topics)}')
+
+
+def main():
+    ap = argparse.ArgumentParser(description='中国裁判文书网银行当事人全量采集器')
+    ap.add_argument('command', nargs='?', default='collect', choices=['collect', 'doctor', 'probe', 'status', 'export', 'seeds'])
+    ap.add_argument('--config', default='config.yaml')
+    args = ap.parse_args()
+    cfg, output = load_config(ROOT / args.config)
+    print(f'wenshu-bank-collector v{VERSION}')
+    if args.command == 'collect':
+        asyncio.run(collect(cfg, output))
+    elif args.command == 'doctor':
+        asyncio.run(doctor(cfg, output))
+    elif args.command == 'probe':
+        asyncio.run(probe(cfg, output))
+    elif args.command == 'seeds':
+        show_seeds(cfg)
+    else:
+        status(output)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except KeyboardInterrupt:
+        print('\n已停止。已下载文件与 SQLite 切片状态均已保留；下次运行会跳过已完成的历史切片并继续。')

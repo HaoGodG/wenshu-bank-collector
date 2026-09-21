@@ -1,0 +1,50 @@
+browser:
+  channel: chrome
+  profile_dir: ./.browser-profile
+  login_url: https://wenshu.court.gov.cn/website/wenshu/181010CARHS5BS3C/index.html?open=login
+  search_url: https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html
+  site_ready_timeout_seconds: 90
+  site_ready_reload_attempts: 3
+  query_wait_timeout_seconds: 600
+
+storage:
+  output_root: ''
+
+collection:
+  strategy: bank_party_date_bisect
+  page_size: 15
+  site_visible_limit: 600
+  request_interval_seconds: 1.5
+  max_download_retries: 3
+  query_condition_verify_retries: 3
+
+  # 必须按裁判日期倒序，便于本地已有数据作为回溯上界。
+  sort_fields: s51:desc
+
+  # 用户要求：本地下载记录作为去重权威来源。
+  # 若本地已有成功下载文书，取其中最大的裁判日期作为本轮检索上界。
+  # 例如本地最大裁判日期为 2026-06-11，则只检索 ... ~ 2026-06-11（包含当天）。
+  resume_from_local_latest: true
+
+  # 不依赖旧 slices 直接跳过；真正去重以 documents 表中本地 docId/status 为准。
+  skip_completed_slices: false
+
+  # 只有单日仍 >600 时才使用 facet 继续细分。
+  overflow_facets:
+    - s33
+    - s39
+    - s40
+    - s4
+    - s8
+    - s6
+
+  query_seeds:
+    - group: BANK_PARTY
+      name: 银行作为当事人
+      topics:
+        - BANK_PARTY
+      conditions:
+        - key: s17
+          value: 银行
+      note: 当事人字段包含银行；日期超600递归二分
+      enabled: true
