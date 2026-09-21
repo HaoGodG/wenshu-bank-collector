@@ -33,15 +33,15 @@ def test_har_date_backend_translation_is_accepted():
     assert missing == []
 
 
-def test_cprq_top_level_uses_start_end_not_cprq():
+def test_cprq_stays_only_in_query_condition():
     p = {'queryCondition': '[]'}
     WenshuBrowser._inject_wire_conditions(p, [
         {'key': 's17', 'value': '银行'},
         {'key': 'cprq', 'value': '2025-12-31 TO 2026-07-01'},
     ])
     assert p['s17'] == '银行'
-    assert p['cprqStart'] == '2025-12-31'
-    assert p['cprqEnd'] == '2026-07-01'
+    assert 'cprqStart' not in p
+    assert 'cprqEnd' not in p
     assert 'cprq' not in p
 
 
