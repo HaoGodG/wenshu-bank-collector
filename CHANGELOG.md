@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.0 branch fix — date slicing / diagnostics
+
+- 新 HAR 证明 `2026-03-16 TO 2026-04-01` 可被后端正常解析并返回 458 条，日期值本身不是失败原因。
+- 日期切片不再做 +/-1 天扩张，逻辑区间按网页原样发送，避免相邻切片重叠。
+- 恢复并保留历史实际采集已经成功过的 direct `queryDoc` 路径；不再把“原生模块链必须替代 direct queryDoc”作为结论。
+- 保留顶层 `s17/cprqStart/cprqEnd` + `queryCondition` 的请求形态，并继续对后端 `queryItemList` 做 fail-closed 校验。
+- 移除未被证据支持的日期预提交、Referer/pageId 恢复等假设性修复逻辑。
+- 新增 `probe-date --start-date ... --end-date ...`，单独验证指定日期切片且不下载文书。
+- 新增自动 `queryDoc` 诊断日志 `data/03_采集运行记录/query_debug.jsonl`；请求发出时即落盘，Chrome 后续崩溃也能保留证据。
+- 诊断日志带 `run_id` 和时间戳；不记录 Cookie，ciphertext 只记录长度与 SHA-256。
+- 新增下载前高置信元数据去重：案号 + 法院 + 裁判日期 + 规范化完整标题全部一致时，跨 docId 直接跳过下载。
+- 保留下载后 SHA-256 去重作为最终兜底。
+
 ## v0.4.0 branch fix — 0316/0401 HAR
 
 - 新 HAR 证明 `2026-03-16 TO 2026-04-01` 可被后端正常解析并返回 458 条，日期值本身不是失败原因。
