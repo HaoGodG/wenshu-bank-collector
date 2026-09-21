@@ -47,6 +47,49 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(json.loads(p['queryCondition']), c)
 
+    async def test_date_query_uses_native_page_pipeline_by_default(self):
+        class NativePage:
+            def __init__(self):
+                self.start_payload = None
+            async def evaluate(self, expression, *args):
+                if 'addParams1545035259000' in expression and 'loadData1545184311000' in expression:
+                    self.start_payload = args[0]
+                    return {'ok': True, 'postData': args[0]['conditions']}
+                if expression == "() => $.WebSite.getModuleData('1545184311000')":
+                    return {
+                        'queryParams': {'queryItemList': [
+                            {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'},
+                            {'id': 's31', 'value': '2026-03-17', 'oper': 'GREATER'},
+                            {'id': 's31', 'value': '2026-03-31', 'oper': 'LESS'},
+                        ]},
+                        'queryResult': {'resultCount': 1, 'resultList': [{'31': '2026-03-31'}]},
+                    }
+                raise AssertionError(expression)
+            async def wait_for_function(self, expression, timeout):
+                self.wait_expression = expression
+                self.wait_timeout = timeout
+
+        class NativeBrowser(WenshuBrowser):
+            def __init__(self):
+                self.cfg = {'query_wait_timeout_seconds': 5}
+                self.page = NativePage()
+                self._prepared_cprq = None
+            async def _sync_query_url(self, conditions):
+                return 'https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html?pageId=test'
+            async def _prepare_date_filter(self, conditions, force=False):
+                return self._extract_cprq(conditions)
+
+        b = NativeBrowser()
+        conditions = [
+            {'key': 's17', 'value': '银行'},
+            {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
+        ]
+        data = await b.query(conditions, 1, 15, 's50:desc')
+        self.assertEqual(data['queryResult']['resultCount'], 1)
+        self.assertEqual(b.page.start_payload['pageNum'], 1)
+        self.assertEqual(b.page.start_payload['pageSize'], 15)
+        self.assertEqual(b.page.start_payload['sortFields'], 's50:desc')
+
     async def test_date_query_runs_official_cprq_preflight_once(self):
         class DatePage:
             def __init__(self):
