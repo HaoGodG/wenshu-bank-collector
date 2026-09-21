@@ -19,8 +19,26 @@ ROOT = Path(__file__).resolve().parent
 VERSION = '0.4.0'
 
 
+def _merge_config(base: dict, override: dict) -> dict:
+    merged = dict(base or {})
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_config(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def load_config(path: Path):
-    cfg = yaml.safe_load(path.read_text(encoding='utf-8'))
+    cfg = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+
+    # Local secrets/settings live outside Git.  config.local.yaml only needs
+    # to contain the fields it wants to override.
+    local_path = path.with_name('config.local.yaml')
+    if local_path.exists():
+        local_cfg = yaml.safe_load(local_path.read_text(encoding='utf-8')) or {}
+        cfg = _merge_config(cfg, local_cfg)
+
     out = (cfg.get('storage') or {}).get('output_root') or ''
     output = Path(out).expanduser() if out else ROOT / 'data'
     output.mkdir(parents=True, exist_ok=True)
