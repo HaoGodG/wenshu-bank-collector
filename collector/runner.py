@@ -36,10 +36,10 @@ class CollectorRunner:
         self.root = root
         self.state = state
         self.browser = browser
-        self.page_size = int(cfg.get('page_size', 15))
+        self.page_size = int(cfg.get('page_size', 5))
         self.site_limit = min(max(1, int(cfg.get('site_visible_limit', 600))), 600)
         self.interval = float(cfg.get('request_interval_seconds', 1.5))
-        self.sort = cfg.get('sort_fields', 's50:desc')
+        self.sort = cfg.get('sort_fields', 's51:desc')
         self.max_pages = max(1, math.ceil(self.site_limit / self.page_size))
         self.overflow_facets = list(cfg.get('overflow_facets') or ['s33', 's39', 's40', 's4', 's8', 's6'])
         # Local document rows are the dedupe authority.  Slices remain audit/checkpoint records.
