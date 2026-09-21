@@ -1,5 +1,5 @@
 from __future__ import annotations
-import asyncio, json, uuid, hashlib
+import asyncio, json, uuid, hashlib, os, getpass
 from pathlib import Path
 from datetime import datetime
 from urllib.parse import quote, urlparse, parse_qs, urlencode
@@ -286,6 +286,115 @@ class WenshuBrowser:
             await asyncio.sleep(delay)
         return last
 
+    def _read_login_credentials(self) -> tuple[str, str]:
+        """Read credentials without storing secrets in the repository."""
+        username_env = str(self.cfg.get('login_username_env') or 'WENSHU_USERNAME').strip()
+        password_env = str(self.cfg.get('login_password_env') or 'WENSHU_PASSWORD').strip()
+
+        username = str(os.environ.get(username_env) or '').strip()
+        password = str(os.environ.get(password_env) or '')
+
+        if not username:
+            username = input("裁判文书网账号/手机号: ").strip()
+        if not password:
+            password = getpass.getpass("裁判文书网密码: ")
+
+        if not username or not password:
+            raise RuntimeError(
+                f"缺少登录凭据。可设置环境变量 {username_env} / {password_env}，"
+                "或在程序提示时输入。"
+            )
+        return username, password
+
+    async def _wait_account_login_frame(self, timeout_seconds: int = 60):
+        """Wait for the official unified-account login iframe proven by HAR."""
+        deadline = asyncio.get_running_loop().time() + max(1, int(timeout_seconds))
+        while asyncio.get_running_loop().time() < deadline:
+            for frame in self.page.frames:
+                try:
+                    if 'account.court.gov.cn' not in str(frame.url or ''):
+                        continue
+                    user = frame.locator('input[name="username"]').first
+                    pwd = frame.locator('input[name="password"]').first
+                    if await user.count() and await pwd.count():
+                        return frame
+                except PlaywrightError:
+                    continue
+            await asyncio.sleep(0.5)
+        raise SiteCallTimeout(
+            "统一账号登录页未在预期时间内加载。请检查浏览器是否停在登录页、"
+            "网络是否可访问 account.court.gov.cn。"
+        )
+
+    async def _login_error_text(self, frame) -> str:
+        try:
+            node = frame.locator('.login-error-tips').first
+            if not await node.count():
+                return ''
+            text = str(await node.text_content() or '').strip()
+            if text and await node.is_visible():
+                return text
+        except PlaywrightError:
+            pass
+        return ''
+
+    async def _wait_login_callback(self, frame, timeout_seconds: int) -> None:
+        """Wait until the official OAuth iframe returns control to wenshu."""
+        deadline = asyncio.get_running_loop().time() + max(1, int(timeout_seconds))
+        last_error = ''
+        while asyncio.get_running_loop().time() < deadline:
+            url = str(self.page.url or '')
+            if 'wenshu.court.gov.cn' in url and '181010CARHS5BS3C' not in url:
+                return
+
+            # Wrong credentials are surfaced by the official account page.
+            if 'account.court.gov.cn' in str(getattr(frame, 'url', '') or ''):
+                err = await self._login_error_text(frame)
+                if err:
+                    last_error = err
+
+            await asyncio.sleep(1.0)
+
+        if last_error:
+            raise RuntimeError(f"统一账号登录未成功：{last_error}")
+        raise SiteCallTimeout(
+            "等待登录/验证码完成超时。程序没有绕过验证码；"
+            "请在已打开的浏览器中完成官方验证后重试。"
+        )
+
+    async def _auto_login_via_official_page(self):
+        """Autofill the official login UI; captcha remains a human action.
+
+        HAR evidence shows the login page embeds account.court.gov.cn in an
+        iframe.  That page performs password encryption, TianAi captcha
+        validation and /api/login itself, then OAuth redirects back to Wenshu.
+        We therefore never replay the encrypted login API directly.
+        """
+        await self._goto(self.cfg['login_url'], tolerate_aborted=True)
+        frame = await self._wait_account_login_frame(
+            timeout_seconds=int(self.cfg.get('login_page_timeout_seconds', 60))
+        )
+
+        username, password = self._read_login_credentials()
+        user_input = frame.locator('input[name="username"]').first
+        password_input = frame.locator('input[name="password"]').first
+        submit = frame.locator('[data-action="login-submit"]').first
+
+        await user_input.fill(username)
+        await password_input.fill(password)
+        if not await submit.count():
+            raise RuntimeError("统一账号登录按钮未找到，官网登录页结构可能已变化。")
+
+        print("\n账号和密码已自动填入官网登录页。")
+        print("程序将点击登录；如出现官方验证码，请在浏览器中手工完成。")
+        print("验证码成功后程序会自动检测 OAuth 回跳，不需要再回控制台按 Enter。")
+        await submit.click()
+
+        await self._wait_login_callback(
+            frame,
+            timeout_seconds=int(self.cfg.get('login_wait_timeout_seconds', 600)),
+        )
+
     async def ensure_login(self):
         # 先只等 currentUser 所需的基础脚本；不要因为 cipher() 偶发慢加载而误判登录失败。
         await self._wait_base_ready(timeout_seconds=min(20, int(self.cfg.get('site_ready_timeout_seconds', 90))))
@@ -296,23 +405,23 @@ class WenshuBrowser:
             return info
 
         print("\n尚未检测到裁判文书网登录态。")
-        print("程序会尝试打开正常登录页；如果网站中止自动导航，请直接在已打开的 Chrome 窗口里手工点击登录或打开登录页。")
-        await self._goto(self.cfg['login_url'], tolerate_aborted=True)
 
-        print("\n请在浏览器里正常登录，并手工完成网站验证码。")
-        print("登录成功后，只要浏览器已经回到 wenshu.court.gov.cn 页面即可。")
-        input("完成后回到 PyCharm 控制台，按 Enter 继续... ")
+        if bool(self.cfg.get('auto_login', True)):
+            await self._auto_login_via_official_page()
+        else:
+            print("自动填充登录已关闭，请在已打开的浏览器中正常登录并完成人工验证码。")
+            await self._goto(self.cfg['login_url'], tolerate_aborted=True)
+            input("登录完成后回到控制台，按 Enter 继续... ")
 
-        # 无论登录页最后停在哪个 URL，都回到新的检索页做实际登录态验证。
+        # OAuth 成功后重新打开检索页，用 Wenshu 自己的 currentUser 做最终确认。
         await self.open_search_page(require_ready=False)
         await self._wait_base_ready(timeout_seconds=20)
-        info = await self._wait_user_info(attempts=6, delay=1.0)
+        info = await self._wait_user_info(attempts=8, delay=1.0)
         if not self._is_logged_in(info):
             safe_keys = sorted(info.keys()) if isinstance(info, dict) else []
             diag = await self._page_diag()
             raise RuntimeError(
-                "仍未检测到有效登录态。浏览器窗口会保存独立 Profile；请重新运行，"
-                "确认已在该窗口内正常登录后再按 Enter。"
+                "统一账号流程结束，但裁判文书网仍未检测到有效登录态。"
                 f" currentUser返回字段={safe_keys} 页面状态={diag}"
             )
         await self.wait_ready()
