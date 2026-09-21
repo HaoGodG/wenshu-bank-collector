@@ -461,32 +461,44 @@ class WenshuBrowser:
         return has_start and has_end
 
     async def _native_query_current_date_context(self, page_num: int, page_size: int, sort_fields: str):
+        """Use the exact list refresh path triggered by website sort/pagination UI."""
         timeout_ms = max(1, int(self.cfg.get("query_wait_timeout_seconds", 600))) * 1000
         payload = {
             "pageNum": int(page_num),
             "pageSize": int(page_size),
-            "sortFields": str(sort_fields or "s50:desc"),
+            "sortFields": str(sort_fields or "s51:desc"),
         }
         js = r'''({pageNum, pageSize, sortFields}) => {
           if (typeof loadData1545184311000 !== 'function') {
             return {ok:false, reason:'loadData1545184311000 missing'};
           }
           const $m = $('#_view_1545184311000');
-          const parts = String(sortFields || 's50:desc').split(':', 2);
-          const sortKey = parts[0] || 's50';
+          const parts = String(sortFields || 's51:desc').split(':', 2);
+          const sortKey = parts[0] || 's51';
           const sortDir = (parts[1] || 'desc').toLowerCase();
+
+          // Mirror the website's sort-click state before loadData().
           $m.find('.tool_PX').removeClass('tool_On tool_OnUp');
           const $sort = $m.find(".tool_PX[data-value='" + sortKey + "']").first();
-          if ($sort.length) {
-            $sort.addClass(sortDir === 'asc' ? 'tool_OnUp' : 'tool_On');
+          if (!$sort.length) {
+            return {ok:false, reason:'sort control missing: ' + sortKey};
           }
+          $sort.addClass(sortDir === 'asc' ? 'tool_OnUp' : 'tool_On');
+
+          // The successful manual HAR uses the website's page-size selector.
           const $size = $m.find('select.pageSizeSelect').first();
-          if ($size.length) $size.val(String(pageSize));
+          if (!$size.length) {
+            return {ok:false, reason:'pageSizeSelect missing'};
+          }
+          $size.val(String(pageSize));
+
+          // Avoid reading stale module data while the refresh is in flight.
           $('body').removeData('1545184311000');
+
+          // This is the same argument shape used by initEvents when the user
+          // clicks a sort control or page button.
           const postData = loadData1545184311000({
             searchMid: '1545035259000',
-            seniorMid: '1545034775000',
-            postData: {},
             pageNum: pageNum
           });
           return {ok: postData !== false};
@@ -500,7 +512,11 @@ class WenshuBrowser:
                 reason = started.get("reason") if isinstance(started, dict) else started
                 raise RuntimeError(f"网页原生日期查询启动失败: {reason}")
         response = await response_info.value
-        await response.finished()
+        try:
+            await response.finished()
+        except PlaywrightError:
+            # Request/response evidence is already persisted by listeners.
+            pass
         await self.page.wait_for_function(
             r'''() => {
               try {
@@ -563,18 +579,17 @@ class WenshuBrowser:
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
         raw_date = self._date_context_value(conditions)
-        date_key = self._date_context_key_for(conditions)
-        if raw_date and str(sort_fields or '').lower().startswith('s51:'):
-            self._debug_append('date_sort_override', {
-                'requested_sort': sort_fields,
-                'effective_sort': 's50:desc',
-                'cprq': raw_date,
+        if raw_date:
+            await self._ensure_date_page_context(conditions)
+            self._debug_append("date_native_query", {
+                "cprq": raw_date,
+                "pageNum": page_num,
+                "pageSize": page_size,
+                "sortFields": sort_fields,
             })
-            sort_fields = 's50:desc'
-        await self._ensure_date_page_context(conditions)
-
-        if raw_date and self._date_native_only_key == date_key:
-            return await self._native_query_current_date_context(page_num, page_size, sort_fields)
+            return await self._native_query_current_date_context(
+                page_num, page_size, sort_fields
+            )
 
         ciphertext = await self.page.evaluate("cipher()")
         param = {
@@ -588,19 +603,6 @@ class WenshuBrowser:
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
         data = data or {}
         self._log_decoded_query(param, data)
-
-        # Keep the historically successful direct path when it works.  If the
-        # backend silently drops cprq, immediately fall back within the same
-        # run to the website's own loadData/refreshModule path, using the
-        # already-initialized official date context.
-        if raw_date and not self._response_has_date(data, raw_date):
-            self._date_native_only_key = date_key
-            self._debug_append("date_direct_fallback_native", {
-                "cprq": raw_date,
-                "pageNum": page_num,
-                "sortFields": sort_fields,
-            })
-            return await self._native_query_current_date_context(page_num, page_size, sort_fields)
         return data
 
     async def facet(self, conditions: list[dict], group_field: str):
