@@ -514,12 +514,7 @@ class WenshuBrowser:
             if not isinstance(started, dict) or not started.get("ok"):
                 reason = started.get("reason") if isinstance(started, dict) else started
                 raise RuntimeError(f"网页原生日期查询启动失败: {reason}")
-        response = await response_info.value
-        try:
-            await response.finished()
-        except PlaywrightError:
-            # Request/response evidence is already persisted by listeners.
-            pass
+        await response_info.value
         await self.page.wait_for_function(
             r'''() => {
               try {
@@ -611,9 +606,33 @@ class WenshuBrowser:
                 "pageSize": page_size,
                 "sortFields": sort_fields,
             })
-            return await self._native_query_current_date_context(
-                page_num, page_size, sort_fields
-            )
+            for native_attempt in range(1, 3):
+                try:
+                    return await self._native_query_current_date_context(
+                        page_num, page_size, sort_fields
+                    )
+                except RuntimeError as e:
+                    message = str(e)
+                    if not message.startswith("网页原生日期查询启动失败:"):
+                        raise
+                    if native_attempt >= 2:
+                        raise
+                    diag = await self._page_diag()
+                    self._debug_append("date_native_context_recover", {
+                        "cprq": raw_date,
+                        "pageNum": page_num,
+                        "pageSize": page_size,
+                        "sortFields": sort_fields,
+                        "reason": message,
+                        "page_diag": diag,
+                    })
+                    print(
+                        f"  [query-recover] 当前检索页模块失效，"
+                        f"重建日期上下文并重试当前第 {page_num} 页: {message}"
+                    )
+                    self.invalidate_date_context(raw_date)
+                    await self._ensure_date_page_context(conditions)
+            raise RuntimeError("日期查询恢复循环异常退出")
 
         ciphertext = await self.page.evaluate("cipher()")
         param = {
