@@ -20,9 +20,24 @@ class CaptureBrowser(WenshuBrowser):
         self.cfg = {'query_wait_timeout_seconds': 5}
         self.page = FakePage()
         self.captured = []
+        self.native_calls = []
+        self.date_context_conditions = []
 
     async def _ensure_date_page_context(self, conditions):
         self.date_context_conditions = conditions
+
+    async def _native_query_current_date_context(self, page_num, page_size, sort_fields):
+        self.native_calls.append((page_num, page_size, sort_fields))
+        raw = self._date_context_value(self.date_context_conditions)
+        start, end = raw.split(' TO ', 1)
+        return {
+            'queryParams': {'queryItemList': [
+                {'id': 's31', 'value': start, 'oper': 'GREATER'},
+                {'id': 's31', 'value': end, 'oper': 'LESS'},
+                {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'},
+            ]},
+            'queryResult': {'resultCount': 1, 'resultList': []},
+        }
 
     async def _site_get_data(self, cfg, param):
         self.captured.append((cfg, dict(param)))
@@ -44,22 +59,21 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(json.loads(p['queryCondition']), c)
 
-    async def test_date_query_keeps_historic_direct_querydoc_path(self):
+    async def test_date_query_uses_native_load_data_path(self):
         b = CaptureBrowser()
         c = [
             {'key': 's17', 'value': '银行'},
             {'key': 'cprq', 'value': '2026-03-17 TO 2026-03-31'},
         ]
-        await b.query(c, 1, 15, 's50:desc')
-        cfg, p = b.captured[-1]
-        self.assertTrue(cfg.endswith('@queryDoc'))
-        self.assertEqual(p['s17'], '银行')
-        self.assertEqual(p['cprqStart'], '2026-03-17')
-        self.assertEqual(p['cprqEnd'], '2026-03-31')
-        self.assertEqual(p['sortFields'], 's50:desc')
-        self.assertEqual(p['pageNum'], 1)
-        self.assertEqual(p['pageSize'], 15)
-        self.assertEqual(json.loads(p['queryCondition']), c)
+        data = await b.query(c, 1, 5, 's51:desc')
+        self.assertEqual(b.date_context_conditions, c)
+        self.assertEqual(b.native_calls, [(1, 5, 's51:desc')])
+        self.assertEqual(b.captured, [])
+        self.assertTrue(
+            WenshuBrowser._response_has_date(
+                data, '2026-03-17 TO 2026-03-31'
+            )
+        )
 
     async def test_facet_s17_double_send(self):
         b = CaptureBrowser()
@@ -120,14 +134,15 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(row['recorded_at'])
             self.assertEqual(row['payload'], {'ok': True})
 
-    def test_runner_defaults_to_date_safe_s50_sort(self):
+    def test_runner_defaults_match_successful_manual_sort_har(self):
         r = CollectorRunner(
-            {'page_size': 15},
+            {},
             Path('/tmp'),
             object(),
             object(),
         )
-        self.assertEqual(r.sort, 's50:desc')
+        self.assertEqual(r.sort, 's51:desc')
+        self.assertEqual(r.page_size, 5)
 
     def test_site_limit_is_hard_capped_600(self):
         r = CollectorRunner(
