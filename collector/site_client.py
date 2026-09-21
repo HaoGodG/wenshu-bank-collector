@@ -482,6 +482,7 @@ class WenshuBrowser:
           }
           const $size = $m.find('select.pageSizeSelect').first();
           if ($size.length) $size.val(String(pageSize));
+          $('body').removeData('1545184311000');
           const postData = loadData1545184311000({
             searchMid: '1545035259000',
             seniorMid: '1545034775000',
@@ -501,15 +502,12 @@ class WenshuBrowser:
         response = await response_info.value
         await response.finished()
         await self.page.wait_for_function(
-            r'''({pageNum, sortFields}) => {
+            r'''() => {
               try {
                 const d = $.WebSite.getModuleData('1545184311000');
-                const qp = (d || {}).queryParams || {};
-                return String(qp.sortFields || '') === String(sortFields)
-                  && Number(qp.pageNum || 1) === Number(pageNum);
+                return !!(d && d.queryParams && d.queryResult);
               } catch(e) { return false; }
             }''',
-            arg=payload,
             timeout=timeout_ms,
         )
         data = await self.page.evaluate(
@@ -566,6 +564,13 @@ class WenshuBrowser:
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
         raw_date = self._date_context_value(conditions)
         date_key = self._date_context_key_for(conditions)
+        if raw_date and str(sort_fields or '').lower().startswith('s51:'):
+            self._debug_append('date_sort_override', {
+                'requested_sort': sort_fields,
+                'effective_sort': 's50:desc',
+                'cprq': raw_date,
+            })
+            sort_fields = 's50:desc'
         await self._ensure_date_page_context(conditions)
 
         if raw_date and self._date_native_only_key == date_key:
@@ -577,7 +582,7 @@ class WenshuBrowser:
             "ciphertext": ciphertext,
             "pageNum": page_num,
             "pageSize": page_size,
-            "queryCondition": json.dumps(conditions, ensure_ascii=False)
+            "queryCondition": json.dumps(conditions, ensure_ascii=False, separators=(",", ":"))
         }
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
