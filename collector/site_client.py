@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio, json, uuid, hashlib
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import quote, urlparse, parse_qs
+from urllib.parse import quote, urlparse, parse_qs, urlencode
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
 class FatalAccessRestriction(RuntimeError): pass
@@ -15,6 +15,7 @@ class WenshuBrowser:
         self.pw = self.context = self.page = None
         self.debug_log_path = Path(debug_log_path) if debug_log_path else None
         self.debug_run_id = uuid.uuid4().hex
+        self._date_context_key = None
 
     def _debug_append(self, event_type: str, payload: dict):
         if not self.debug_log_path:
@@ -174,6 +175,7 @@ class WenshuBrowser:
             raise
 
     async def open_search_page(self, *, require_ready: bool = True):
+        self._date_context_key = None
         page_id = uuid.uuid4().hex
         url = f"{self.cfg['search_url']}?pageId={page_id}"
         # 检索页本身偶尔也会因页面脚本二次导航产生 ERR_ABORTED；只要最终页面仍
@@ -336,6 +338,114 @@ class WenshuBrowser:
             raise
 
     @staticmethod
+    def _date_context_value(conditions: list[dict]) -> str | None:
+        values = [
+            str(item.get("value") or "").strip()
+            for item in conditions or []
+            if str(item.get("key") or "").strip() == "cprq"
+        ]
+        return values[0] if len(values) == 1 and values[0] else None
+
+    @staticmethod
+    def _date_context_key_for(conditions: list[dict]) -> str | None:
+        raw = WenshuBrowser._date_context_value(conditions)
+        if not raw:
+            return None
+        return json.dumps(conditions, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+    async def _ensure_date_page_context(self, conditions: list[dict]):
+        """Initialize a new date slice through the page's own onload path.
+
+        Current website source restores URL conditions with
+        addParams1545035259000($.WebSite.getParameter()) and then calls
+        loadData().  A synthetic queryDoc sent after an unfiltered page load can
+        receive HTTP 200 while cprq is silently omitted from queryItemList.
+        """
+        raw = self._date_context_value(conditions)
+        key = self._date_context_key_for(conditions)
+        if not raw or not key:
+            return
+        if self._date_context_key == key:
+            return
+        if " TO " not in raw:
+            raise ValueError(f"非法裁判日期条件: {raw}")
+
+        start_date, end_date = [x.strip() for x in raw.split(" TO ", 1)]
+        page_id = uuid.uuid4().hex
+        query_pairs = [
+            ("pageId", page_id),
+            ("cprqStart", start_date),
+            ("cprqEnd", end_date),
+        ]
+        for item in conditions or []:
+            k = str(item.get("key") or "").strip()
+            if not k or k == "cprq":
+                continue
+            query_pairs.append((k, str(item.get("value") or "")))
+        url = f"{self.cfg['search_url']}?{urlencode(query_pairs)}"
+
+        self._debug_append("date_context_navigation", {
+            "page_id": page_id,
+            "cprq": raw,
+            "url": url,
+            "conditions": conditions,
+        })
+        await self._goto(url, tolerate_aborted=True)
+        await self.wait_ready()
+
+        timeout_ms = max(1, int(self.cfg.get("query_wait_timeout_seconds", 600))) * 1000
+        expected = {"startDate": start_date, "endDate": end_date}
+        js = r'''({startDate, endDate}) => {
+          try {
+            const d = $.WebSite.getModuleData('1545184311000');
+            const items = (((d || {}).queryParams || {}).queryItemList || []);
+            const norm = v => String(v || '').replace(/\\-/g, '-');
+            const hasStart = items.some(x =>
+              String(x.id || x.key || '') === 's31' &&
+              norm(x.value) === startDate &&
+              ['GREATER','GT','>'].includes(String(x.oper || '').toUpperCase())
+            );
+            const hasEnd = items.some(x =>
+              String(x.id || x.key || '') === 's31' &&
+              norm(x.value) === endDate &&
+              ['LESS','LT','<'].includes(String(x.oper || '').toUpperCase())
+            );
+            return hasStart && hasEnd;
+          } catch (e) {
+            return false;
+          }
+        }'''
+        try:
+            await self.page.wait_for_function(js, arg=expected, timeout=timeout_ms)
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
+            self._date_context_key = None
+            raise SiteCallTimeout(
+                f"页面按官方 URL 初始化后仍未形成日期条件: cprq={raw}"
+            ) from e
+
+        data = await self.page.evaluate(
+            "() => $.WebSite.getModuleData('1545184311000')"
+        )
+        qp = (data or {}).get("queryParams") or {}
+        qr = (data or {}).get("queryResult") or {}
+        self._debug_append("date_context_ready", {
+            "page_url": self.page.url,
+            "cprq": raw,
+            "backend_queryItemList": qp.get("queryItemList"),
+            "resultCount": qr.get("resultCount"),
+        })
+        self._date_context_key = key
+
+    def invalidate_date_context(self, value: str | None = None):
+        if value is None:
+            self._date_context_key = None
+            return
+        # The cached key contains the serialized cprq value; invalidate only
+        # when it refers to the failed slice.
+        if self._date_context_key and value in self._date_context_key:
+            self._date_context_key = None
+
+    @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
         """Mirror the current website request shape.
 
@@ -364,6 +474,7 @@ class WenshuBrowser:
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        await self._ensure_date_page_context(conditions)
         ciphertext = await self.page.evaluate("cipher()")
         param = {
             "sortFields": sort_fields,
