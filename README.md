@@ -29,7 +29,11 @@ s17=银行
 
 ## 日期协议
 
-`bank-core-date.har` 已确认后端把：
+`bank-core-date(1).har` 中可以直接确认：网页后续修改日期时，顶层 `cprqStart/cprqEnd` 可能仍保留页面 URL 中的旧值，而当前日期条件随 `queryCondition.cprq` 变化。
+
+因此本分支调用站点接口时关闭 URL 参数自动合并（`readUrlParam: false`），显式保留 `pageId` 和顶层 `s17=银行`，**日期切片只由 `queryCondition.cprq` 控制**。
+
+v0.4.0 既有运行时后端校验会检查 `cprq` 是否被解析为：
 
 ```text
 cprq=A TO B
@@ -48,11 +52,13 @@ s31 LESS B
 2026-01-01 ~ 2026-06-30
 ```
 
-实际发送：
+实际活动查询条件发送为：
 
 ```text
-cprq=2025-12-31 TO 2026-07-01
+queryCondition=[..., {"key":"cprq","value":"2025-12-31 TO 2026-07-01"}]
 ```
+
+不会再把该值复制到顶层 `cprqStart/cprqEnd`，以免与地址栏残留日期混淆。
 
 确保首尾日期不漏。
 
