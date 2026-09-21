@@ -45,6 +45,19 @@ def test_cprq_is_mirrored_from_current_condition_not_url():
     assert 'cprq' not in p
 
 
+def test_s50_resume_policy_is_not_assumed_by_runner(tmp_path):
+    db = StateDB(tmp_path / 'state.sqlite3')
+    r = CollectorRunner(
+        {'page_size': 15, 'sort_fields': 's50:desc', 'resume_from_local_latest': False},
+        tmp_path,
+        db,
+        object(),
+    )
+    assert r.sort == 's50:desc'
+    assert r.resume_from_local_latest is False
+    db.close()
+
+
 def test_local_latest_success_date(tmp_path):
     db = StateDB(tmp_path / 'state.sqlite3')
     for i, d in enumerate(['2026-06-11', '2026-05-01', '2025-12-31'], 1):
