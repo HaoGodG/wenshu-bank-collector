@@ -14,7 +14,7 @@ collection:
   strategy: bank_party_date_bisect
   page_size: 5
   site_visible_limit: 600
-  request_interval_seconds: 1.5
+  request_interval_seconds: 0.5
   max_download_retries: 3
   query_condition_verify_retries: 3
 
