@@ -1,158 +1,95 @@
-# bank-core-date.har 真实请求证据（v0.4.0 分支修复）
+# 裁判文书网日期 HAR 证据（v0.4.0 分支）
 
-本文件记录本次附件 `bank-core-date(1).har` 中可以直接确认的请求行为，以及采集器据此做出的修正。
+本文件记录两份真实浏览器 HAR 对日期检索链路的结论：
 
-## 1. 银行当事人
+- `bank-core-date(1).har`
+- `bank-core-date-0316-0401.har`
 
-真实请求中，银行主体条件同时出现在：
+## 1. 2026-03-16 TO 2026-04-01 本身是有效条件
+
+手工在网页选择 `2026-03-16 ~ 2026-04-01` 后，真实 queryDoc 请求包含：
 
 ```text
+cprqStart=2026-03-16
+cprqEnd=2026-04-01
 s17=银行
-queryCondition=[{"key":"s17","value":"银行"}, ...]
-```
-
-采集器继续保留顶层 `s17` 作为兼容字段，同时以 `queryCondition` 作为实际检索条件集合。
-
-## 2. 日期条件以 queryCondition.cprq 为准
-
-HAR 中初始页面 URL 带有：
-
-```text
-cprqStart=2026-09-08
-cprqEnd=2026-09-15
-s17=银行
-```
-
-第一次日期检索时，请求为：
-
-```text
-cprqStart=2026-09-08
-cprqEnd=2026-09-15
 queryCondition=[
-  {"key":"cprq","value":"2026-09-08 TO 2026-09-15"},
+  {"key":"cprq","value":"2026-03-16 TO 2026-04-01"},
   {"key":"s17","value":"银行"}
 ]
 ```
 
-随后网页清除日期条件时，顶层 `cprqStart/cprqEnd` 仍然保持
-`2026-09-08/2026-09-15`，但 `queryCondition` 已只剩：
+解密后的后端响应明确包含：
 
 ```text
-[{"key":"s17","value":"银行"}]
+s31 GREATER 2026-03-16
+s31 LESS    2026-04-01
+s17 EQUAL   银行某
+resultCount=458
 ```
 
-之后再次设置新的日期范围时，HAR 出现：
+因此程序日志中同一个 `cprq=2026-03-16 TO 2026-04-01` 被后端完全丢弃，
+不是因为该日期字符串非法。
+
+## 2. 程序报错发生在后端条件解析阶段
+
+失败日志中的后端 `queryItemList` 只有：
 
 ```text
-cprqStart=2026-09-08
-cprqEnd=2026-09-15
-queryCondition=[
-  {"key":"s17","value":"银行"},
-  {"key":"cprq","value":"2026-08-04 TO 2026-09-30"}
-]
+s17 EQUAL 银行某
 ```
 
-以及：
+而没有任何 `s31`。这意味着 queryDoc 本身返回了成功响应，但日期条件没有进入
+后端实际查询条件。运行时 verifier 正确阻止了这种响应继续被当成目标切片处理。
+
+## 3. queryCondition.cprq 是活动日期条件，但浏览器请求仍带顶层日期
+
+旧 HAR 证明，页面内重新选择日期后，URL 中的顶层
+`cprqStart/cprqEnd` 可能仍保留旧值，而 `queryCondition.cprq` 已变化；
+后端最终按新的 `queryCondition.cprq` 解析日期。
+
+因此：
+
+- `queryCondition.cprq` 是活动条件；
+- 顶层 `cprqStart/cprqEnd` 不是权威来源；
+- 但真实浏览器 queryDoc 请求始终会携带顶层日期字段。
+
+分支实现采用折中方式：`readUrlParam=false`，不继承地址栏旧值；
+同时从当前 `queryCondition.cprq` 显式生成当前的
+`cprqStart/cprqEnd`，最大程度贴近浏览器请求形态。
+
+## 4. 日期范围不应再做 +/-1 天扩张
+
+新 HAR 查询 `2026-03-16 TO 2026-04-01` 的结果列表中直接出现
+裁判日期 `2026-04-01` 的文书。
+
+因此不能把后端返回的操作名 `LESS` 简单解释为严格数学意义上的 `<`。
+网页本身就是把用户选择的起止日期原样发送。
+
+分支现在将逻辑切片：
 
 ```text
-cprqStart=2026-09-08
-cprqEnd=2026-09-15
-queryCondition=[
-  {"key":"s17","value":"银行"},
-  {"key":"cprq","value":"2026-03-30 TO 2026-09-30"}
-]
+2026-03-17 ~ 2026-03-31
 ```
 
-这说明顶层 `cprqStart/cprqEnd` 会残留旧页面 URL 中的值，不能作为当前日期过滤条件的权威来源；实际变化的日期过滤条件是 `queryCondition` 中的 `cprq`。
-
-## 3. 顶层旧参数的来源
-
-同一份 HAR 中加载的站点 `website.js` 显示，`$.WebSite.getData` 默认：
-
-```javascript
-readUrlParam: true
-```
-
-并在发送请求前执行：
-
-```javascript
-postData = $.WebSite.getParameter(postData)
-```
-
-而 `getParameter` 会先读取 `location.search`，再把调用方显式参数合并进去。
-
-因此，当页面 URL 中仍有旧的 `cprqStart/cprqEnd` 时，即使当前检索只在
-`queryCondition` 中更新 `cprq`，这些旧日期仍会被自动带到 POST 顶层。
-
-## 4. 本分支修复
-
-本分支不再把 `cprq` 主动复制为顶层 `cprqStart/cprqEnd`，并在程序化调用
-`$.WebSite.getData` 时设置：
-
-```javascript
-readUrlParam: false
-```
-
-同时显式补充当前页面的 `pageId`，继续保留顶层 `s17=银行` 兼容字段。
-
-修复后的请求职责为：
+直接发送为：
 
 ```text
-pageId=<当前页面>
-s17=银行
-queryCondition=[..., {"key":"cprq","value":"A TO B"}]
+cprq=2026-03-17 TO 2026-03-31
 ```
 
-日期条件只由当前切片生成的 `queryCondition.cprq` 控制，不再受浏览器地址栏中旧日期参数污染。
+不再扩张成 `2026-03-16 TO 2026-04-01`。这样也避免相邻日期切片人为重叠。
 
-## 5. 现有日期边界转换
+## 5. /api/fp/cprq
 
-v0.4.0 现有逻辑仍把逻辑闭区间 `[start,end]` 转换为：
+网页源码在高级检索日期提交时会 POST `/api/fp/cprq`，源码注释将其描述为
+“记录日志”。分支继续模拟这一步以贴近真实网页链路，但不把它当作日期条件语义的唯一依据。
 
-```text
-(start - 1 day) TO (end + 1 day)
-```
+当 queryDoc 连续两次成功返回但丢失日期条件时，分支会：
 
-并由运行时的后端 `queryParams.queryItemList` 校验日期条件是否按预期生效。
-本次附件直接证明的是“活动日期条件应以 `queryCondition.cprq` 为准”和“顶层日期参数可能陈旧”；
-本次修复不额外改变既有的日期边界语义。
+1. 重新执行日期预提交；
+2. 刷新检索页；
+3. 获取新的 `pageId`；
+4. 再发送当前切片。
 
-
-## 6. 日期提交前还有 /api/fp/cprq
-
-同一份 HAR 还显示，网页每次真正提交新的裁判日期范围前，都会额外 POST：
-
-```text
-/api/fp/cprq
-```
-
-例如：
-
-```text
-inputCprqStartVal=2026-08-04
-inputCprqEndVal=2026-09-30
-gjjsSubmit=1
-```
-
-紧接着才发送包含：
-
-```text
-queryCondition=[..., {"key":"cprq","value":"2026-08-04 TO 2026-09-30"}]
-```
-
-的 `queryDoc`。
-
-HAR 中另一组 `2026-03-30 TO 2026-09-30` 也是相同顺序。网页源码的高级检索提交事件同样明确调用
-`/api/fp/cprq` 后再执行 `addParams...` / `$page.loadData()`。
-
-因此本分支在每个新的递归日期切片第一次查询前，也执行同样的官方日期预提交。
-同一切片的后续分页和 facet 查询不会重复提交；如果后端响应里再次丢失 `cprq`，
-重试前会清除预提交缓存，下一次请求重新执行 `/api/fp/cprq`，而不是原样重发。
-
-这用于解释重复出现的：
-
-```text
-后端实际 queryItemList: [{'id':'s17', ...}]
-```
-
-即请求成功但日期条件被静默忽略的情况。
+避免在同一个异常页面上下文中机械重发三次完全相同的请求。
