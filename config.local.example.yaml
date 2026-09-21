@@ -1,0 +1,5 @@
+browser:
+  # 复制本文件为 config.local.yaml 后填写。
+  # config.local.yaml 已加入 .gitignore，不会提交到 Git。
+  login_username: "你的账号或手机号"
+  login_password: "你的密码"
