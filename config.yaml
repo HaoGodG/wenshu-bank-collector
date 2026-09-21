@@ -18,7 +18,6 @@ collection:
   max_download_retries: 3
   query_condition_verify_retries: 3
 
-
   # 必须按裁判日期倒序，便于本地已有数据作为回溯上界。
   sort_fields: s51:desc
 
