@@ -291,8 +291,9 @@ class WenshuBrowser:
         username_env = str(self.cfg.get('login_username_env') or 'WENSHU_USERNAME').strip()
         password_env = str(self.cfg.get('login_password_env') or 'WENSHU_PASSWORD').strip()
 
-        username = str(os.environ.get(username_env) or '').strip()
-        password = str(os.environ.get(password_env) or '')
+        # Priority: explicit local config -> environment -> interactive fallback.
+        username = str(self.cfg.get('login_username') or os.environ.get(username_env) or '').strip()
+        password = str(self.cfg.get('login_password') or os.environ.get(password_env) or '')
 
         if not username:
             username = input("裁判文书网账号/手机号: ").strip()
