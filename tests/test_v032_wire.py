@@ -21,6 +21,9 @@ class CaptureBrowser(WenshuBrowser):
         self.page = FakePage()
         self.captured = []
 
+    async def _ensure_date_page_context(self, conditions):
+        self.date_context_conditions = conditions
+
     async def _site_get_data(self, cfg, param):
         self.captured.append((cfg, dict(param)))
         if cfg.endswith('@leftDataItem'):
@@ -65,6 +68,30 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         _, p = b.captured[-1]
         self.assertEqual(p['s17'], '银行')
         self.assertEqual(json.loads(p['queryCondition']), c)
+
+    def test_response_has_date(self):
+        data = {
+            'queryParams': {
+                'queryItemList': [
+                    {'id': 's31', 'value': '2026\\-03\\-17', 'oper': 'GREATER'},
+                    {'id': 's31', 'value': '2026\\-03\\-31', 'oper': 'LESS'},
+                    {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'},
+                ]
+            }
+        }
+        self.assertTrue(
+            WenshuBrowser._response_has_date(
+                data, '2026-03-17 TO 2026-03-31'
+            )
+        )
+        self.assertFalse(
+            WenshuBrowser._response_has_date(
+                {'queryParams': {'queryItemList': [
+                    {'id': 's17', 'value': '银行某', 'oper': 'EQUAL'}
+                ]}},
+                '2026-03-17 TO 2026-03-31',
+            )
+        )
 
     def test_query_debug_masks_ciphertext(self):
         form = WenshuBrowser._safe_form(
