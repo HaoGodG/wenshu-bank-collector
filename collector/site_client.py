@@ -213,10 +213,16 @@ class WenshuBrowser:
         timeout = int(self.cfg.get('query_wait_timeout_seconds',600))
         # 不传 error callback：保留网站自身 -11 验证码弹窗与重试机制。
         js = r'''({cfg, param}) => new Promise((resolve) => {
+          const requestParam = Object.assign({}, param || {});
+          const pageId = $.WebSite.getParameter("pageId");
+          if (pageId && !Object.prototype.hasOwnProperty.call(requestParam, "pageId")) {
+            requestParam.pageId = pageId;
+          }
           $.WebSite.getData({
             cfg: cfg,
-            param: param,
+            param: requestParam,
             async: true,
+            readUrlParam: false,
             rollback: function(data){ resolve(data); }
           });
         })'''
@@ -234,30 +240,23 @@ class WenshuBrowser:
 
     @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
-        """Mirror the current website request shape.
+        """Mirror only the HAR-proven compatibility field.
 
-        Real HAR evidence:
-        - s17 is sent both top-level and in queryCondition.
-        - date UI sends cprqStart/cprqEnd top-level, while queryCondition keeps
-          cprq=START TO END.
+        The active filters are carried by queryCondition.  The supplied HAR
+        shows cprqStart/cprqEnd can remain stale URL values while
+        queryCondition.cprq changes.  Therefore date conditions must not be
+        copied into top-level cprqStart/cprqEnd.
+
+        Keep s17 mirrored at top level because the bank-party request carries
+        it both top-level and inside queryCondition.
         """
-        counts: dict[str, int] = {}
-        for item in conditions or []:
-            key = str(item.get("key") or "").strip()
-            if key:
-                counts[key] = counts.get(key, 0) + 1
-
-        for item in conditions or []:
-            key = str(item.get("key") or "").strip()
-            if not key or counts.get(key) != 1:
-                continue
-            value = str(item.get("value") or "")
-            if key == "cprq" and " TO " in value:
-                start_date, end_date = value.split(" TO ", 1)
-                param["cprqStart"] = start_date.strip()
-                param["cprqEnd"] = end_date.strip()
-            else:
-                param[key] = value
+        s17_values = [
+            str(item.get("value") or "")
+            for item in conditions or []
+            if str(item.get("key") or "").strip() == "s17"
+        ]
+        if len(s17_values) == 1:
+            param["s17"] = s17_values[0]
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
