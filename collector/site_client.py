@@ -364,7 +364,130 @@ class WenshuBrowser:
             param["cprqEnd"] = end_date
         return param
 
-    async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+    async def _native_date_query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        """Run a date query through the site's own list-module pipeline.
+
+        Real HAR/source evidence shows the browser path is:
+        addParams1545035259000 -> loadData1545184311000 ->
+        $.WebSite.refreshModule("1545184311000", ...).
+
+        Directly calling $.WebSite.getData(queryDoc) repeatedly caused the
+        backend to accept s17 but silently drop cprq.  This method lets the
+        page build the query exactly as its own UI does, then reads the
+        decrypted module data that website.js stores on <body>.
+        """
+        await self._sync_query_url(conditions)
+        await self._prepare_date_filter(conditions)
+
+        payload = {
+            "conditions": conditions,
+            "pageNum": int(page_num),
+            "pageSize": int(page_size),
+            "sortFields": str(sort_fields or "s50:desc"),
+        }
+        js = r'''({conditions, pageNum, pageSize, sortFields}) => {
+          if (typeof addParams1545035259000 !== 'function') {
+            return {ok:false, reason:'addParams1545035259000 missing'};
+          }
+          if (typeof loadData1545184311000 !== 'function') {
+            return {ok:false, reason:'loadData1545184311000 missing'};
+          }
+          if (!window.jQuery || !$.WebSite) {
+            return {ok:false, reason:'jQuery/WebSite missing'};
+          }
+
+          // Rebuild the exact selected-condition bar from scratch so recursive
+          // slices never inherit a previous range.
+          $('#_view_1545035259000 .LT_Filter_right p').remove();
+          $('.list-box li').removeClass('on');
+
+          for (const item of (conditions || [])) {
+            const key = String(item.key || '');
+            const value = String(item.value || '');
+            if (!key) continue;
+
+            if (key === 'cprq' && value.includes(' TO ')) {
+              const parts = value.split(' TO ', 2);
+              // addParams has native cprqStart/cprqEnd handling.  It may return
+              // false on the second half because the same cprq chip already
+              // exists; the chip itself is still correctly installed.
+              addParams1545035259000({
+                cprqStart: parts[0].trim(),
+                cprqEnd: parts[1].trim()
+              });
+            } else {
+              const one = {};
+              one[key] = value;
+              addParams1545035259000(one);
+            }
+          }
+
+          // loadData1545184311000 derives sorting from the visible sort tools.
+          $('.tool_PX').removeClass('tool_On tool_OnUp');
+          const sortParts = String(sortFields || 's50:desc').split(':', 2);
+          const sortKey = sortParts[0] || 's50';
+          const sortDir = (sortParts[1] || 'desc').toLowerCase();
+          let $sort = $(".tool_PX[data-value='" + sortKey + "']").first();
+          if (!$sort.length) {
+            // Before the first list render the sort controls may not exist.
+            $('#_view_1545184311000').append(
+              '<div class="tool_PX" data-value="' + sortKey + '" style="display:none"></div>'
+            );
+            $sort = $(".tool_PX[data-value='" + sortKey + "']").first();
+          }
+          $sort.addClass(sortDir === 'asc' ? 'tool_OnUp' : 'tool_On');
+
+          // The native loader reads page size from the module's select.
+          let $size = $('#_view_1545184311000 select.pageSizeSelect').first();
+          if (!$size.length) {
+            $('#_view_1545184311000').append(
+              '<select class="pageSizeSelect" style="display:none">' +
+              '<option>5</option><option>10</option><option>15</option></select>'
+            );
+            $size = $('#_view_1545184311000 select.pageSizeSelect').first();
+          }
+          $size.val(String(pageSize));
+
+          // Remove the previous decrypted module payload so Python can wait
+          // for this request rather than accidentally reading stale data.
+          $('body').removeData('1545184311000');
+
+          const postData = loadData1545184311000({
+            searchMid: '1545035259000',
+            seniorMid: '1545034775000',
+            postData: {},
+            pageNum: pageNum
+          });
+          if (postData === false) {
+            return {ok:false, reason:'native loadData returned false'};
+          }
+          return {ok:true, postData:postData, href:window.location.href};
+        }'''
+        started = await self.page.evaluate(js, payload)
+        if not isinstance(started, dict) or not started.get("ok"):
+            reason = started.get("reason") if isinstance(started, dict) else started
+            raise RuntimeError(f"网页原生日期查询启动失败：{reason}")
+
+        timeout_ms = max(1, int(self.cfg.get('query_wait_timeout_seconds', 600))) * 1000
+        try:
+            await self.page.wait_for_function(
+                """() => {
+                  const d = $.WebSite.getModuleData('1545184311000');
+                  return !!(d && d.queryParams && d.queryResult);
+                }""",
+                timeout=timeout_ms,
+            )
+        except (PlaywrightTimeoutError, PlaywrightError) as e:
+            raise SiteCallTimeout(
+                "网页原生日期查询长时间未完成；如果浏览器有验证码，请正常完成后重试"
+            ) from e
+
+        data = await self.page.evaluate(
+            "() => $.WebSite.getModuleData('1545184311000')"
+        )
+        return data or {}
+
+    async def _direct_query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
         await self._sync_query_url(conditions)
         await self._prepare_date_filter(conditions)
         ciphertext = await self.page.evaluate("cipher()")
@@ -378,6 +501,13 @@ class WenshuBrowser:
         self._inject_wire_conditions(param, conditions)
         data = await self._site_get_data("com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO@queryDoc", param)
         return data or {}
+
+    async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        has_date = bool(self._extract_cprq(conditions))
+        use_native = bool(self.cfg.get("use_native_date_query", True))
+        if has_date and use_native:
+            return await self._native_date_query(conditions, page_num, page_size, sort_fields)
+        return await self._direct_query(conditions, page_num, page_size, sort_fields)
 
     async def facet(self, conditions: list[dict], group_field: str):
         await self._sync_query_url(conditions)
