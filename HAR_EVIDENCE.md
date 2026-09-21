@@ -264,3 +264,70 @@ s51:asc, pageSize=5:
 5. 后端必须真实返回两个 `s31`，否则 fail-closed。
 
 这里没有把 `pageSize=15` 写成最终根因；`5` 的作用是让程序请求尽可能贴近已验证成功的手工请求。
+
+
+## 9. 2026-09-21 完整“登录 -> 日期检索 -> 改每页15条 -> 排序”HAR：pageSize=15 是已复现触发条件
+
+材料：`bank-core-date-0316-0401-from-login-to-desc-15.har`。
+
+完整链路如下：
+
+1. 正常登录；
+2. 高级搜索直接提交 `s17=银行` + `2026-03-16 ~ 2026-04-01`；
+3. 搜索页初始化第一笔 queryDoc：
+   - `sortFields=s50:desc`
+   - 不显式传 `pageSize`
+   - 后端实际 `pageSize=5`
+   - `resultCount=458`
+   - 两个 `s31` 均存在；
+4. 手工把每页数量切到 `15`，仍然是 `s50:desc`；
+5. 此时后端立即变为：
+   - `resultCount=24277`
+   - 仅剩 `s17 EQUAL 银行某`
+   - 两个 `s31` 全部消失；
+6. 之后再切 `s51:desc`、`s51:asc`、翻第2页、第6页，日期条件都没有恢复。
+
+对第 3 步和第 4 步的 POST form 做逐字段 diff：
+
+```text
+相同：
+  cfg
+  pageId
+  pageNum=1
+  s17=银行
+  cprqStart=2026-03-16
+  cprqEnd=2026-04-01
+  queryCondition=[cprq, s17]
+  sortFields=s50:desc
+  csrf token
+  viewport fields
+
+变化：
+  ciphertext（每次请求正常变化）
+  pageSize: 缺省 -> 15
+```
+
+除随机/时序相关的 `ciphertext` 外，唯一业务参数差异就是 `pageSize=15`。
+
+同时回查全部已提供 HAR：
+
+- 成功日期查询：未显式传 pageSize（后端默认 5），或显式 `pageSize=5`；
+- 没有发现任何显式 `pageSize=15` 且后端仍保留 `s31` 的成功反例；
+- 手工 `s51:desc/asc + pageSize=5` 已证明排序本身正常。
+
+因此在当前站点行为下，可以把以下组合作为已复现的错误触发条件：
+
+```text
+cprq + pageSize=15
+    -> HTTP 200
+    -> 后端静默丢弃 cprq
+    -> queryItemList 只剩 s17
+```
+
+正式修复策略：
+
+- 日期查询强制使用 `pageSize=5`；
+- 日期排序仍使用 `s51:desc`；
+- 日期列表统一通过官网 `loadData1545184311000` 原生链路；
+- 浏览器层即使收到其他 pageSize，也会对带 `cprq` 的请求覆盖为 5，并写诊断日志；
+- 每次响应继续校验后端真实 `s31`，防止站点再次静默退化。
