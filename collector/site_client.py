@@ -585,6 +585,13 @@ class WenshuBrowser:
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
         raw_date = self._date_context_value(conditions)
         if raw_date:
+            if int(page_size) != 5:
+                self._debug_append("date_page_size_override", {
+                    "requested_page_size": page_size,
+                    "effective_page_size": 5,
+                    "cprq": raw_date,
+                })
+                page_size = 5
             await self._ensure_date_page_context(conditions)
             initial = self._date_context_data or {}
             initial_count = ((initial.get("queryResult") or {}).get("resultCount"))
