@@ -152,3 +152,43 @@ data/03_采集运行记录/query_debug.jsonl
 7. queryDoc 自动诊断日志。
 
 未验证的“原生模块链必须替代 direct queryDoc”“Referer 是根因”“需要前置搜索”等假设均不再作为正式实现依据。
+
+
+## 7. 2026-09-21 失败请求自动诊断：已定位到页面初始化路径差异
+
+`run_id=95e43fc223f14d52b9c084c41fdc6469` 的自动诊断记录显示：
+
+1. 页面打开 `?pageId=93ff...` 后，先由官网脚本自动发送：
+   `queryCondition=[]`、`sortFields=s50:desc`；
+2. 随后程序 direct queryDoc 明确发送了：
+   - `s17=银行`
+   - `cprqStart=2026-03-17`
+   - `cprqEnd=2026-03-31`
+   - `queryCondition=[s17 + cprq]`
+   - `sortFields=s51:desc`
+3. 该请求 HTTP 200，但解密结果为：
+   - `resultCount=24279`
+   - `queryItemList` 只有 `s17 EQUAL 银行某`
+   - 没有任何 `s31`
+
+所以失败不是“Python 没有把日期字段发出去”，而是“日期字段已经在线路上，后端仍没有把它纳入实际查询条件”。
+
+成功的 `03-16~04-01` 手工 HAR 则不同：
+
+1. 浏览器先 GET：
+   `?pageId=...&cprqStart=2026-03-16&cprqEnd=2026-04-01&s17=银行`
+2. 页面初始化时第一笔 queryDoc 就带日期与银行条件；
+3. 后端返回两个 `s31` 条件和 `resultCount=458`。
+
+官网 `index.js?v=1.6` 的 onload 代码也明确：
+
+```text
+如果当前 pageId 没有 localStorage 恢复项：
+  addParams1545035259000($.WebSite.getParameter())
+然后：
+  loadData()
+```
+
+即日期条件会先进入页面“已选条件”模块，再由 `loadData1545184311000` 生成实际列表请求。
+
+因此当前修复不再把日期切片当成纯无状态 XHR 参数切换。每个新日期切片会先用带条件的搜索页 URL 让官网 onload 初始化一次；之后 direct queryDoc 仍可继续用于排序/分页。若 direct queryDoc 再次静默丢日期，则同一次运行自动回退到当前页面的官网 `loadData1545184311000`，并继续 fail-closed 验证后端 `s31`。
