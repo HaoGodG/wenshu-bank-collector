@@ -18,13 +18,16 @@ collection:
   max_download_retries: 3
   query_condition_verify_retries: 3
 
-  # 必须按裁判日期倒序，便于本地已有数据作为回溯上界。
-  sort_fields: s51:desc
+  # 真实 HAR 与 2026-09-21 诊断均验证：日期条件与官网默认 s50:desc 可同时生效；
+  # 当前站点使用 s51:desc 时会把 cprq 静默丢弃，因此正式采集固定使用 s50:desc。
+  sort_fields: s50:desc
 
   # 用户要求：本地下载记录作为去重权威来源。
   # 若本地已有成功下载文书，取其中最大的裁判日期作为本轮检索上界。
   # 例如本地最大裁判日期为 2026-06-11，则只检索 ... ~ 2026-06-11（包含当天）。
-  resume_from_local_latest: true
+  # s50 并非裁判日期排序；中途停止后不能用本地最大裁判日期裁剪远端查询范围，
+  # 否则可能排除同一未完成切片中尚未下载的更晚文书。续跑改由 documents 去重保证安全。
+  resume_from_local_latest: false
 
   # 不依赖旧 slices 直接跳过；真正去重以 documents 表中本地 docId/status 为准。
   skip_completed_slices: false
