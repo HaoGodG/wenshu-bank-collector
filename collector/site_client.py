@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio, json, uuid, hashlib
 from pathlib import Path
+from datetime import datetime
 from urllib.parse import quote, urlparse, parse_qs
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError, Error as PlaywrightError
 
@@ -13,6 +14,7 @@ class WenshuBrowser:
         self.project_root = project_root
         self.pw = self.context = self.page = None
         self.debug_log_path = Path(debug_log_path) if debug_log_path else None
+        self.debug_run_id = uuid.uuid4().hex
 
     def _debug_append(self, event_type: str, payload: dict):
         if not self.debug_log_path:
@@ -20,6 +22,8 @@ class WenshuBrowser:
         try:
             self.debug_log_path.parent.mkdir(parents=True, exist_ok=True)
             record = {
+                "recorded_at": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+                "run_id": self.debug_run_id,
                 "event_type": event_type,
                 "payload": payload,
             }
