@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -12,6 +13,7 @@ from collector.state import StateDB
 from collector.site_client import WenshuBrowser, FatalAccessRestriction
 from collector.runner import CollectorRunner
 from collector.exporter import Exporter
+from collector.planner import with_date_condition
 
 ROOT = Path(__file__).resolve().parent
 VERSION = '0.4.0'
@@ -55,6 +57,41 @@ async def collect(cfg, output):
         print(f"\n站点明确访问限制：{e}\n已保留 checkpoint，不进行规避。", file=sys.stderr)
     finally:
         Exporter(output, state).export_all()
+        state.close()
+        await browser.stop()
+
+
+async def probe_date(cfg, output, start_text: str, end_text: str):
+    start = date.fromisoformat(start_text)
+    end = date.fromisoformat(end_text)
+    if start > end:
+        raise ValueError('start-date 不能晚于 end-date')
+
+    browser = WenshuBrowser(cfg['browser'], ROOT)
+    state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
+    try:
+        await browser.start()
+        await browser.ensure_login()
+        seeds = seeds_from(cfg)
+        if not seeds:
+            print('没有配置 query_seeds')
+            return
+        seed = seeds[0]
+        runner = CollectorRunner(cfg['collection'], output, state, browser)
+        conditions = with_date_condition(seed.conditions, start, end)
+        wire = next((c.value for c in conditions if c.key == 'cprq'), '')
+        print(f'日期切片验证: logical={start} ~ {end}')
+        print(f'wire cprq={wire}')
+        print('本命令会执行官网 /api/fp/cprq 日期预提交 + queryDoc 条件校验，但不会下载文书。')
+        data = await runner.query_checked(conditions, 1)
+        qp = (data or {}).get('queryParams') or {}
+        qr = (data or {}).get('queryResult') or {}
+        rows = qr.get('resultList') or []
+        print('后端 queryItemList:', qp.get('queryItemList'))
+        print('resultCount:', qr.get('resultCount'))
+        print('第一页前5条裁判日期:', [x.get('31') for x in rows[:5]])
+        print('PROBE-DATE PASS：该日期条件已被后端实际应用。')
+    finally:
         state.close()
         await browser.stop()
 
@@ -121,8 +158,10 @@ def show_seeds(cfg):
 
 def main():
     ap = argparse.ArgumentParser(description='中国裁判文书网银行当事人全量采集器')
-    ap.add_argument('command', nargs='?', default='collect', choices=['collect', 'doctor', 'probe', 'status', 'export', 'seeds'])
+    ap.add_argument('command', nargs='?', default='collect', choices=['collect', 'doctor', 'probe', 'probe-date', 'status', 'export', 'seeds'])
     ap.add_argument('--config', default='config.yaml')
+    ap.add_argument('--start-date')
+    ap.add_argument('--end-date')
     args = ap.parse_args()
     cfg, output = load_config(ROOT / args.config)
     print(f'wenshu-bank-collector v{VERSION}')
@@ -132,6 +171,10 @@ def main():
         asyncio.run(doctor(cfg, output))
     elif args.command == 'probe':
         asyncio.run(probe(cfg, output))
+    elif args.command == 'probe-date':
+        if not args.start_date or not args.end_date:
+            ap.error('probe-date 需要 --start-date 和 --end-date')
+        asyncio.run(probe_date(cfg, output, args.start_date, args.end_date))
     elif args.command == 'seeds':
         show_seeds(cfg)
     else:
