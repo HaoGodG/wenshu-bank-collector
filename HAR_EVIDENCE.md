@@ -194,68 +194,73 @@ data/03_采集运行记录/query_debug.jsonl
 因此当前修复不再把日期切片当成纯无状态 XHR 参数切换。每个新日期切片会先用带条件的搜索页 URL 让官网 onload 初始化一次；之后 direct queryDoc 仍可继续用于排序/分页。若 direct queryDoc 再次静默丢日期，则同一次运行自动回退到当前页面的官网 `loadData1545184311000`，并继续 fail-closed 验证后端 `s31`。
 
 
-## 8. 2026-09-21 第二次 probe：排序字段是当前可复现触发条件
+## 8. 2026-09-21 第二次 probe + 手工排序 HAR：s51 不是根因
 
-`run_id=a34c4cd339c04d7a83dbdab15da982f9` 给出了同一页面内的对照：
-
-### 官网页面初始化（成功）
+第二次程序 probe 的 `run_id=a34c4cd339c04d7a83dbdab15da982f9` 确实出现：
 
 ```text
-pageId=300e6f6a...
-cprqStart=2026-03-17
-cprqEnd=2026-03-31
-s17=银行
-sortFields=s50:desc
-queryCondition=[cprq, s17]
+官网初始化:
+  s50:desc
+  cprq=2026-03-17 TO 2026-03-31
+  resultCount=386
+  后端包含两个 s31
+
+随后程序:
+  s51:desc
+  pageSize=15
+  同一日期
+  resultCount=24279
+  后端只剩 s17
 ```
 
-后端：
+仅看这一轮程序日志，会让人怀疑 `s51`。但新的手工排序 HAR
+`bank-core-date-0316-0401-desc-2s.har` 提供了直接反证。
+
+对 `2026-03-16 TO 2026-04-01`，解密后的真实结果为：
 
 ```text
-s31 GREATER 2026-03-17
-s31 LESS    2026-03-31
-s17 EQUAL   银行某
-resultCount=386
+s50:desc, pageSize=5:
+  resultCount=458
+  s31 GREATER 2026-03-16
+  s31 LESS    2026-04-01
+  s17 EQUAL   银行某
+
+s51:desc, pageSize=5:
+  resultCount=458
+  s31 GREATER 2026-03-16
+  s31 LESS    2026-04-01
+  s17 EQUAL   银行某
+  第一页裁判日期均为 2026-04-01
+
+s51:asc, pageSize=5:
+  resultCount=458
+  s31 GREATER 2026-03-16
+  s31 LESS    2026-04-01
+  s17 EQUAL   银行某
+  第一页裁判日期均为 2026-03-16
 ```
 
-说明页面初始化修复是有效的，日期条件已经真正进入后端。
+因此：
 
-### 随后 direct queryDoc（失败）
+- `s51:desc` 本身不是日期条件丢失的根因；
+- `s51:asc` 也正常；
+- 排序功能本身正常工作；
+- 程序失败请求与手工成功 `s51` 请求之间仍有其他差异。
 
-同一个 pageId、同一个 Referer、同一组日期与银行条件，改为：
+当前剩余的明显差异包括：
 
-```text
-sortFields=s51:desc
-pageSize=15
-```
+- 手工成功 `s51` 使用 `pageSize=5`，程序失败使用 `pageSize=15`；
+- 手工排序完全由网页 `initEvents -> loadData1545184311000` 事件链触发；
+- 程序此前仍混有 synthetic direct `getData(queryDoc)` 路径；
+- 浏览器窗口尺寸 / UA / 运行环境也存在差异，但尚无证据证明它们是根因。
 
-后端立即退化为：
+官网源码同时确认 pageSize 下拉支持 `5/10/15`，所以不能直接断言 `15` 非法。
+为了停止继续猜单个参数，当前实现直接收敛到已经被手工 HAR 证明成功的请求形态：
 
-```text
-s17 EQUAL 银行某
-resultCount=24279
-```
+1. 新日期切片先通过带 `cprqStart/cprqEnd/s17` 的 URL 初始化页面；
+2. 日期列表查询统一走官网 `loadData1545184311000`；
+3. 排序使用 `s51:desc`；
+4. `page_size` 暂时固定为 `5`；
+5. 后端必须真实返回两个 `s31`，否则 fail-closed。
 
-日期 `s31` 消失。
-
-### 官网 loadData fallback（同样失败）
-
-随后调用官网自己的 `loadData1545184311000`，请求仍带正确
-`cprqStart/cprqEnd/s17/queryCondition`，但只要 `sortFields=s51:desc`，
-后端仍只保留 `s17`。
-
-### 排除 pageSize 与 queryCondition 顺序
-
-旧 HAR 还有一个真实请求：
-
-```text
-sortFields=s50:desc
-pageSize=5
-queryCondition=[s17, cprq]
-```
-
-该日期条件被后端正常接受。
-
-因此 `pageSize` 和条件顺序都不能解释本次差异。当前真实环境中，可重复观察到的关键触发字段是 `sortFields=s51:desc`。
-
-正式日期采集因此固定使用官网默认 `s50:desc`，并在浏览器层阻止带 `cprq` 的请求使用 `s51:*`。
+这里没有把 `pageSize=15` 写成最终根因；`5` 的作用是让程序请求尽可能贴近已验证成功的手工请求。
