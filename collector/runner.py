@@ -135,6 +135,12 @@ class CollectorRunner:
                     invalidate(missing_date)
                 print(f"  [query-verify] 日期条件被后端丢弃；下次重试将重新执行官网 /api/fp/cprq 日期预提交: {missing_date}")
 
+                if attempt >= 2 and attempt < attempts:
+                    recover = getattr(self.browser, 'recover_query_context', None)
+                    if callable(recover):
+                        print("  [query-verify] 连续两次丢失日期条件，刷新检索页并使用新的 pageId 后再试。")
+                        await recover()
+
             if attempt < attempts:
                 await asyncio.sleep(max(self.interval, 2.0))
         raise RuntimeError('裁判文书网连续返回未完整应用检索条件的响应，已停止当前检索以避免误采。 ' + last_reason)
@@ -429,9 +435,24 @@ class CollectorRunner:
         if not doc_id:
             return 'missing'
         self.state.upsert_seen(doc_id, meta, item, seed.topics, query_source=seed.name)
-        # Local DB is the authoritative dedupe source.
+        # Layer 1: exact docId dedupe happens before any remote download call.
         if not self.state.should_download(doc_id):
             return 'skipped'
+
+        # Layer 2: different docIds can still point to the same published
+        # document.  Use only high-confidence list metadata to skip before
+        # isDown/download; incomplete or non-exact metadata falls through.
+        duplicate = self.state.find_pre_download_duplicate(doc_id, meta)
+        if duplicate:
+            canonical = duplicate['canonical_doc_id']
+            self.state.mark_pre_download_duplicate(
+                doc_id,
+                canonical,
+                'same case_no + court + decision_date + normalized title',
+            )
+            print(f"    [pre-dedupe] {meta.get('case_no')} -> duplicate_of={canonical}")
+            return 'duplicate'
+
         retries = int(self.cfg.get('max_download_retries', 3))
         for attempt in range(1, retries + 1):
             try:
