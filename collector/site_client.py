@@ -12,6 +12,7 @@ class WenshuBrowser:
         self.cfg = cfg
         self.project_root = project_root
         self.pw = self.context = self.page = None
+        self._prepared_cprq = None
 
     async def start(self):
         self.pw = await async_playwright().start()
@@ -239,6 +240,59 @@ class WenshuBrowser:
             raise
 
     @staticmethod
+    def _extract_cprq(conditions: list[dict]) -> str | None:
+        values = [
+            str(item.get("value") or "").strip()
+            for item in conditions or []
+            if str(item.get("key") or "").strip() == "cprq"
+        ]
+        return values[0] if len(values) == 1 and values[0] else None
+
+    async def _prepare_date_filter(self, conditions: list[dict], *, force: bool = False):
+        """Mirror the site's own advanced-search date submit hook.
+
+        The current wenshu page posts /api/fp/cprq immediately before queryDoc
+        whenever a date range is submitted.  Replaying recursive date slices
+        without that hook can lead to a successful query response whose
+        queryItemList silently drops cprq.
+        """
+        raw = self._extract_cprq(conditions)
+        if not raw or " TO " not in raw:
+            return None
+        if not force and getattr(self, "_prepared_cprq", None) == raw:
+            return raw
+
+        start_date, end_date = [x.strip() for x in raw.split(" TO ", 1)]
+        js = r'''async ({startDate, endDate}) => {
+          const body = new URLSearchParams({
+            inputCprqStartVal: startDate,
+            inputCprqEndVal: endDate,
+            gjjsSubmit: '1'
+          }).toString();
+          const r = await fetch('/api/fp/cprq', {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
+            body
+          });
+          return {ok: r.ok, status: r.status};
+        }'''
+        result = await self.page.evaluate(js, {"startDate": start_date, "endDate": end_date})
+        if not isinstance(result, dict) or not result.get("ok"):
+            status = result.get("status") if isinstance(result, dict) else None
+            raise RuntimeError(f"裁判日期预提交失败：cprq={raw}, httpStatus={status}")
+        self._prepared_cprq = raw
+        return raw
+
+    def invalidate_prepared_date(self, value: str | None = None):
+        current = getattr(self, "_prepared_cprq", None)
+        if value is None or current == value:
+            self._prepared_cprq = None
+
+    @staticmethod
     def _inject_wire_conditions(param: dict, conditions: list[dict]) -> dict:
         """Mirror only the HAR-proven compatibility field.
 
@@ -260,6 +314,7 @@ class WenshuBrowser:
         return param
 
     async def query(self, conditions: list[dict], page_num: int, page_size: int, sort_fields: str):
+        await self._prepare_date_filter(conditions)
         ciphertext = await self.page.evaluate("cipher()")
         param = {
             "sortFields": sort_fields,
@@ -273,6 +328,7 @@ class WenshuBrowser:
         return data or {}
 
     async def facet(self, conditions: list[dict], group_field: str):
+        await self._prepare_date_filter(conditions)
         param = {
             "groupFields": group_field,
             "facetLimit": 1000,
