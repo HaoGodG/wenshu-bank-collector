@@ -174,6 +174,14 @@ python main.py
 python main.py status
 ```
 
+生成给后续数据处理使用的标准交付包：
+
+```bash
+python main.py delivery
+```
+
+交付命令只包含 `status=success` 的文书，不会复制 SQLite、checkpoint、pending、query debug 或 HTML。每次执行都会重新构建干净的 `04_数据交付/`。
+
 ## 输出
 
 仍写入：
@@ -182,8 +190,16 @@ python main.py status
 data/
 ├── 00_总索引/
 ├── 01_案例原文/
-└── 03_采集运行记录/
-    └── collector.sqlite3
+├── 03_采集运行记录/
+│   └── collector.sqlite3
+└── 04_数据交付/
+    ├── manifest.json
+    ├── documents.jsonl
+    └── documents/
+        └── <document_id>/
+            ├── original.doc
+            ├── fulltext.txt      # 解析成功时存在
+            └── metadata.json
 ```
 
 本地 `documents` 表仍是去重权威来源。下载前按两层判断：

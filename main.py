@@ -13,6 +13,7 @@ from collector.state import StateDB
 from collector.site_client import WenshuBrowser, FatalAccessRestriction
 from collector.runner import CollectorRunner
 from collector.exporter import Exporter
+from collector.delivery import DeliveryExporter
 from collector.planner import with_date_condition
 
 ROOT = Path(__file__).resolve().parent
@@ -181,6 +182,20 @@ def status(output):
         state.close()
 
 
+def build_delivery(output):
+    state = StateDB(output / '03_采集运行记录' / 'collector.sqlite3')
+    try:
+        manifest = DeliveryExporter(output, state).build()
+        print(
+            f"数据交付包已生成：{output / '04_数据交付'} | "
+            f"文书={manifest['document_count']} | "
+            f"有全文={manifest['text_document_count']} | "
+            f"无全文={manifest['documents_without_fulltext']}"
+        )
+    finally:
+        state.close()
+
+
 def show_seeds(cfg):
     seeds = seeds_from(cfg)
     print(f'共 {len(seeds)} 组启用检索条件：')
@@ -191,7 +206,7 @@ def show_seeds(cfg):
 
 def main():
     ap = argparse.ArgumentParser(description='中国裁判文书网银行当事人全量采集器')
-    ap.add_argument('command', nargs='?', default='collect', choices=['collect', 'doctor', 'probe', 'probe-date', 'status', 'export', 'seeds'])
+    ap.add_argument('command', nargs='?', default='collect', choices=['collect', 'doctor', 'probe', 'probe-date', 'status', 'export', 'delivery', 'seeds'])
     ap.add_argument('--config', default='config.yaml')
     ap.add_argument('--start-date')
     ap.add_argument('--end-date')
@@ -208,6 +223,8 @@ def main():
         if not args.start_date or not args.end_date:
             ap.error('probe-date 需要 --start-date 和 --end-date')
         asyncio.run(probe_date(cfg, output, args.start_date, args.end_date))
+    elif args.command == 'delivery':
+        build_delivery(output)
     elif args.command == 'seeds':
         show_seeds(cfg)
     else:
