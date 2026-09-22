@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from collector.delivery import DeliveryExporter
 from collector.state import StateDB
 
@@ -153,7 +151,7 @@ def test_delivery_keeps_success_without_fulltext(tmp_path):
     db.close()
 
 
-def test_delivery_fails_if_success_original_is_missing(tmp_path):
+def test_delivery_reports_and_skips_success_with_missing_original(tmp_path):
     root = tmp_path / 'data'
     db = StateDB(root / '03_采集运行记录' / 'collector.sqlite3')
 
@@ -165,8 +163,62 @@ def test_delivery_fails_if_success_original_is_missing(tmp_path):
         fulltext_path=None,
     )
 
-    with pytest.raises(RuntimeError, match='缺少原始文件'):
-        DeliveryExporter(root, db).build()
+    manifest = DeliveryExporter(root, db).build()
+    delivery = root / '04_数据交付'
 
-    assert not (root / '04_数据交付.__tmp__').exists()
+    assert manifest['source_success_count'] == 1
+    assert manifest['document_count'] == 0
+    assert manifest['skipped_missing_original_count'] == 1
+
+    missing = [
+        json.loads(line)
+        for line in (delivery / 'missing_files.jsonl').read_text(
+            encoding='utf-8'
+        ).splitlines()
+        if line.strip()
+    ]
+    assert len(missing) == 1
+    assert missing[0]['document_id'] == 'doc-missing'
+    assert 'original DOC is missing' in missing[0]['reason']
+    assert (delivery / 'documents.jsonl').read_text(encoding='utf-8') == ''
+
+    db.close()
+
+
+def test_delivery_recovers_original_from_fulltext_sibling(tmp_path):
+    root = tmp_path / 'data'
+    db = StateDB(root / '03_采集运行记录' / 'collector.sqlite3')
+
+    source_dir = (
+        root / '01_案例原文' / '2026' / '某人民法院' / 'case' / 'doc-recover'
+    )
+    source_dir.mkdir(parents=True)
+    (source_dir / 'official_original.doc').write_bytes(b'recovered-doc')
+    (source_dir / 'official_fulltext.txt').write_text('正文', encoding='utf-8')
+
+    _add_document(
+        db,
+        'doc-recover',
+        'success',
+        file_path='01_案例原文/stale/path/official_original.doc',
+        fulltext_path=str(
+            (source_dir / 'official_fulltext.txt').relative_to(root)
+        ),
+        sha='recover-sha',
+    )
+
+    manifest = DeliveryExporter(root, db).build()
+    assert manifest['document_count'] == 1
+    assert manifest['skipped_missing_original_count'] == 0
+
+    row = json.loads(
+        (root / '04_数据交付' / 'documents.jsonl').read_text(
+            encoding='utf-8'
+        ).strip()
+    )
+    assert row['original_resolution'] == 'fulltext_sibling'
+    assert (
+        root / '04_数据交付' / row['original_path']
+    ).read_bytes() == b'recovered-doc'
+
     db.close()

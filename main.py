@@ -190,7 +190,8 @@ def build_delivery(output):
             f"数据交付包已生成：{output / '04_数据交付'} | "
             f"文书={manifest['document_count']} | "
             f"有全文={manifest['text_document_count']} | "
-            f"无全文={manifest['documents_without_fulltext']}"
+            f"无全文={manifest['documents_without_fulltext']} | "
+            f"缺原始文件已跳过={manifest['skipped_missing_original_count']}"
         )
     finally:
         state.close()

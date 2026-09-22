@@ -4,7 +4,7 @@ import json
 import shutil
 from pathlib import Path
 
-from .utils import atomic_write_text, json_dump, now_iso, safe_name, stable_hash
+from .utils import atomic_write_text, json_dump, now_iso, safe_name, stable_hash, sha256_file
 
 
 class DeliveryExporter:
@@ -34,6 +34,42 @@ class DeliveryExporter:
         path = Path(value)
         return path if path.is_absolute() else self.root / path
 
+    def _resolve_original(self, row) -> tuple[Path | None, str]:
+        """Resolve historical/stale file_path values without guessing across cases."""
+        declared = self._source_path(row['file_path'])
+        if declared is not None and declared.is_file():
+            return declared, 'file_path'
+
+        fulltext = self._source_path(row['fulltext_path'])
+        if fulltext is not None:
+            sibling = fulltext.parent / 'official_original.doc'
+            if sibling.is_file():
+                return sibling, 'fulltext_sibling'
+
+        decision_date = str(row['decision_date'] or '')
+        year = decision_date[:4] if len(decision_date) >= 4 else ''
+        court = safe_name(row['court'] or 'unknown')
+        case_no = safe_name(row['case_no'] or 'unknown')
+        if year:
+            case_root = self.root / '01_案例原文' / year / court / case_no
+            if case_root.is_dir():
+                candidates = sorted(case_root.glob('*/official_original.doc'))
+                expected_sha = str(row['sha256'] or '').strip()
+                if expected_sha:
+                    matching = []
+                    for candidate in candidates:
+                        try:
+                            if sha256_file(candidate) == expected_sha:
+                                matching.append(candidate)
+                        except OSError:
+                            continue
+                    if len(matching) == 1:
+                        return matching[0], 'case_dir_sha256'
+                if len(candidates) == 1:
+                    return candidates[0], 'case_dir_unique'
+
+        return None, 'missing'
+
     @staticmethod
     def _delivery_dir_name(source_doc_id: str) -> str:
         prefix = safe_name(source_doc_id, 80)
@@ -50,6 +86,7 @@ class DeliveryExporter:
         documents_root.mkdir(parents=True, exist_ok=True)
 
         rows: list[dict] = []
+        missing_files: list[dict] = []
         text_count = 0
         stats = self.state.stats()
         success_rows = [
@@ -60,12 +97,24 @@ class DeliveryExporter:
         try:
             for row in success_rows:
                 source_doc_id = str(row['source_doc_id'])
-                original_src = self._source_path(row['file_path'])
-                if original_src is None or not original_src.is_file():
-                    raise RuntimeError(
-                        '成功文书缺少原始文件，停止生成交付包: '
-                        f'docId={source_doc_id}, file_path={row["file_path"]!r}'
+                original_src, original_resolution = self._resolve_original(row)
+                if original_src is None:
+                    missing = {
+                        'document_id': source_doc_id,
+                        'case_no': row['case_no'],
+                        'court': row['court'],
+                        'decision_date': row['decision_date'],
+                        'file_path': row['file_path'],
+                        'fulltext_path': row['fulltext_path'],
+                        'sha256': row['sha256'],
+                        'reason': 'collector status=success but original DOC is missing',
+                    }
+                    missing_files.append(missing)
+                    print(
+                        f"[delivery-skip] success记录缺少原始DOC，已跳过: "
+                        f"{row['case_no'] or source_doc_id}"
                     )
+                    continue
 
                 source_dir = original_src.parent
                 source_document = self._read_json(source_dir / 'document.json')
@@ -124,6 +173,7 @@ class DeliveryExporter:
                     'metadata_path': metadata_rel,
                     'text_available': fulltext_rel is not None,
                     'parse_error': source_document.get('parse_error'),
+                    'original_resolution': original_resolution,
                 }
 
                 metadata = {
@@ -143,10 +193,19 @@ class DeliveryExporter:
                 staging_root / 'documents.jsonl',
                 ''.join(json.dumps(x, ensure_ascii=False) + '\n' for x in rows),
             )
+            atomic_write_text(
+                staging_root / 'missing_files.jsonl',
+                ''.join(
+                    json.dumps(x, ensure_ascii=False) + '\n'
+                    for x in missing_files
+                ),
+            )
             manifest = {
                 'schema_version': self.SCHEMA_VERSION,
                 'generated_at': now_iso(),
+                'source_success_count': len(success_rows),
                 'document_count': len(rows),
+                'skipped_missing_original_count': len(missing_files),
                 'text_document_count': text_count,
                 'documents_without_fulltext': len(rows) - text_count,
                 'source_status_counts': stats,
@@ -155,6 +214,7 @@ class DeliveryExporter:
                     status for status in stats if status != 'success'
                 ),
                 'entrypoint': 'documents.jsonl',
+                'missing_file_report': 'missing_files.jsonl',
                 'document_layout': {
                     'original': 'documents/<document_id>/original.doc',
                     'fulltext': 'documents/<document_id>/fulltext.txt (when available)',

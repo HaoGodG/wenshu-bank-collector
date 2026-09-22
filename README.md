@@ -180,7 +180,7 @@ python main.py status
 python main.py delivery
 ```
 
-交付命令只包含 `status=success` 的文书，不会复制 SQLite、checkpoint、pending、query debug 或 HTML。每次执行都会重新构建干净的 `04_数据交付/`。
+交付命令只包含 `status=success` 且原始 DOC 实际存在的文书，不会复制 SQLite、checkpoint、pending、query debug 或 HTML。每次执行都会重新构建干净的 `04_数据交付/`。历史 success 记录如果原始 DOC 已丢失，会写入 `missing_files.jsonl` 并跳过，不阻塞其他文书交付。
 
 ## 输出
 
@@ -195,6 +195,7 @@ data/
 └── 04_数据交付/
     ├── manifest.json
     ├── documents.jsonl
+    ├── missing_files.jsonl
     └── documents/
         └── <document_id>/
             ├── original.doc
