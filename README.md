@@ -114,10 +114,10 @@ skip_completed_slices: true
 
 配置示例：
 
-\`\`\`yaml
+```yaml
 browser:
   login_mode: manual
-\`\`\`
+```
 
 程序不会直接重放 `/api/login`，也不会绕过验证码。旧配置 `auto_login: true/false` 仍兼容，但新配置建议统一使用 `login_mode`。
 
