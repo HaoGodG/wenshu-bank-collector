@@ -364,6 +364,18 @@ class WenshuBrowser:
             await asyncio.sleep(delay)
         return last
 
+    def _login_mode(self) -> str:
+        """Resolve login mode while keeping legacy auto_login compatible."""
+        raw = self.cfg.get('login_mode')
+        if raw is None:
+            return 'auto' if bool(self.cfg.get('auto_login', True)) else 'manual'
+        mode = str(raw).strip().lower()
+        if mode not in ('auto', 'manual'):
+            raise ValueError(
+                f"browser.login_mode 仅支持 auto/manual，当前值={raw!r}"
+            )
+        return mode
+
     def _read_login_credentials(self) -> tuple[str, str]:
         """Read credentials without storing secrets in the repository."""
         username_env = str(self.cfg.get('login_username_env') or 'WENSHU_USERNAME').strip()
@@ -496,12 +508,15 @@ class WenshuBrowser:
 
         print("\n尚未检测到裁判文书网登录态。")
 
-        if bool(self.cfg.get('auto_login', True)):
+        login_mode = self._login_mode()
+        if login_mode == 'auto':
+            print("[login] 模式=auto：程序填写账号密码并点击登录；官方验证码仍需手工完成。")
             await self._auto_login_via_official_page()
         else:
-            print("自动填充登录已关闭，请在已打开的浏览器中正常登录并完成人工验证码。")
+            print("[login] 模式=manual：程序只打开官网登录页，不读取或填写账号密码。")
+            print("请在浏览器中手工输入账号、密码并完成官方验证码。")
             await self._goto(self.cfg['login_url'], tolerate_aborted=True)
-            input("登录完成后回到控制台，按 Enter 继续... ")
+            input("手工登录完成后回到控制台，按 Enter 继续... ")
 
         # OAuth 成功后重新打开检索页，用 Wenshu 自己的 currentUser 做最终确认。
         await self.open_search_page(require_ready=False)

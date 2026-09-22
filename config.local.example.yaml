@@ -1,5 +1,8 @@
 browser:
-  # 复制本文件为 config.local.yaml 后填写。
+  # 复制本文件为 config.local.yaml 后按需修改。
   # config.local.yaml 已加入 .gitignore，不会提交到 Git。
+  # auto: 程序填写账号密码；manual: 全程手工登录。
+  login_mode: auto
+  # login_mode=auto 时配置；manual 模式可不填下面两项。
   login_username: "你的账号或手机号"
   login_password: "你的密码"

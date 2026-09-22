@@ -4,8 +4,10 @@ browser:
   login_url: https://wenshu.court.gov.cn/website/wenshu/181010CARHS5BS3C/index.html?open=login
   search_url: https://wenshu.court.gov.cn/website/wenshu/181217BMTKHNT2W0/index.html
 
-  # 登录态失效时，自动填充官网登录页并点击登录；验证码仍由用户在浏览器中手工完成。
-  auto_login: true
+  # 登录方式：
+  #   auto   = 程序填写账号密码并点击登录；官方验证码仍由用户手工完成。
+  #   manual = 程序只打开官网登录页；账号、密码、验证码全部由用户手工完成。
+  login_mode: auto
   login_username_env: WENSHU_USERNAME
   login_password_env: WENSHU_PASSWORD
   login_page_timeout_seconds: 60

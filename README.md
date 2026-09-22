@@ -107,16 +107,19 @@ skip_completed_slices: true
 
 登录态仍优先复用 `.browser-profile/`。只有登录态失效时才进入统一账号登录流程。
 
-根据真实 HAR，文书网登录页会在 iframe 中打开 `account.court.gov.cn` 的 OAuth 登录页。程序现在会：
+登录方式由 `browser.login_mode` 控制：
 
-1. 打开文书网官方登录页；
-2. 等待带 `back_url` 的统一账号 OAuth iframe；
-3. 自动填写账号和密码并点击“登录”；
-4. 官网自行完成密码加密并发起验证码；
-5. 用户只需在浏览器中手工完成官方验证码；
-6. OAuth 回跳文书网后，程序自动检测登录态并继续，不再需要回控制台按 Enter。
+- `auto`：程序打开官网登录页、填写账号密码并点击“登录”；官网密码加密流程仍由页面自身执行，官方验证码仍需用户手工完成。
+- `manual`：程序只打开官网登录页，不读取、不填写账号密码；账号、密码、验证码全部由用户在浏览器中手工完成，完成后回控制台按 Enter 继续。
 
-程序不会直接重放 `/api/login`，也不会绕过验证码。
+配置示例：
+
+\`\`\`yaml
+browser:
+  login_mode: manual
+\`\`\`
+
+程序不会直接重放 `/api/login`，也不会绕过验证码。旧配置 `auto_login: true/false` 仍兼容，但新配置建议统一使用 `login_mode`。
 
 推荐使用本地覆盖配置。先复制：
 
@@ -128,13 +131,14 @@ cp config.local.example.yaml config.local.yaml
 
 ```yaml
 browser:
+  login_mode: auto
   login_username: "你的账号或手机号"
   login_password: "你的密码"
 ```
 
 `config.local.yaml` 已加入 `.gitignore`，不会提交到 Git。程序启动时会自动把它覆盖到公共的 `config.yaml` 上。
 
-登录凭据读取顺序为：
+`login_mode=auto` 时，登录凭据读取顺序为：
 
 1. `config.local.yaml` 中的 `login_username/login_password`；
 2. 环境变量 `WENSHU_USERNAME/WENSHU_PASSWORD`；

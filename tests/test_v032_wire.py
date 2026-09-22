@@ -174,6 +174,20 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+    def test_login_mode_supports_auto_manual_and_legacy_flag(self):
+        b = WenshuBrowser.__new__(WenshuBrowser)
+        b.cfg = {'login_mode': 'manual'}
+        self.assertEqual(b._login_mode(), 'manual')
+        b.cfg = {'login_mode': 'auto'}
+        self.assertEqual(b._login_mode(), 'auto')
+        b.cfg = {'auto_login': False}
+        self.assertEqual(b._login_mode(), 'manual')
+        b.cfg = {'auto_login': True}
+        self.assertEqual(b._login_mode(), 'auto')
+        b.cfg = {'login_mode': 'invalid'}
+        with self.assertRaises(ValueError):
+            b._login_mode()
+
     def test_query_debug_masks_ciphertext(self):
         form = WenshuBrowser._safe_form(
             'cfg=com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO%40queryDoc'
