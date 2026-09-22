@@ -188,6 +188,13 @@ class V033Tests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             b._login_mode()
 
+    def test_download_href_encodes_doc_id_without_navigating_url_shape(self):
+        href = WenshuBrowser._download_href('（2024）苏1183民初314号 / A+B')
+        self.assertTrue(href.startswith('/down/one?docId='))
+        self.assertNotIn(' ', href)
+        self.assertNotIn('/', href[len('/down/one?docId='):])
+        self.assertIn('%EF%BC%882024%EF%BC%89', href)
+
     def test_query_debug_masks_ciphertext(self):
         form = WenshuBrowser._safe_form(
             'cfg=com.lawyee.judge.dc.parse.dto.SearchDataDsoDTO%40queryDoc'

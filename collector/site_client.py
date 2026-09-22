@@ -892,13 +892,48 @@ class WenshuBrowser:
         }'''
         return await self.page.evaluate(js, doc_id)
 
+    @staticmethod
+    def _download_href(doc_id: str) -> str:
+        return '/down/one?docId=' + quote(str(doc_id), safe='')
+
     async def download_one(self, doc_id: str, target: Path) -> str:
+        """Trigger the official download without navigating the long-lived search page.
+
+        Using window.location.href inside page.evaluate() races with navigation: the
+        browser can destroy that JS execution context before evaluate() returns,
+        producing "Execution context was destroyed" even though the download itself
+        has already started.  A same-origin anchor with the download attribute keeps
+        the search page/context intact and lets Playwright observe the download event.
+        """
         target.parent.mkdir(parents=True, exist_ok=True)
+        link_id = '__wenshu_collector_download__'
+        href = self._download_href(doc_id)
         try:
+            await self.page.evaluate(
+                r'''({id, href}) => {
+                  const old = document.getElementById(id);
+                  if (old) old.remove();
+                  const a = document.createElement('a');
+                  a.id = id;
+                  a.href = href;
+                  a.download = '';
+                  a.style.display = 'none';
+                  document.body.appendChild(a);
+                }''',
+                {'id': link_id, 'href': href},
+            )
             async with self.page.expect_download(timeout=90000) as di:
-                await self.page.evaluate("d => { window.location.href='/down/one?docId='+encodeURIComponent(d); }", doc_id)
+                await self.page.locator('#' + link_id).click()
             dl = await di.value
             await dl.save_as(str(target))
             return dl.suggested_filename
         except PlaywrightTimeoutError as e:
             raise RuntimeError("等待官方 Word 下载超时") from e
+        finally:
+            try:
+                await self.page.evaluate(
+                    "id => { const a = document.getElementById(id); if (a) a.remove(); }",
+                    link_id,
+                )
+            except PlaywrightError:
+                pass
